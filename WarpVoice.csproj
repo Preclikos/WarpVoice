@@ -1,0 +1,22 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+	<PropertyGroup>
+		<TargetFramework>net9.0</TargetFramework>
+		<Nullable>enable</Nullable>
+		<ImplicitUsings>enable</ImplicitUsings>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Discord.Net" Version="3.17.4" />
+		<PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="9.0.6" />
+		<PackageReference Include="NAudio" Version="2.2.1" />
+		<PackageReference Include="SIPSorcery" Version="8.0.22" />
+		<PackageReference Include="Swashbuckle.AspNetCore.Newtonsoft" Version="9.0.1" />
+		<PackageReference Include="Swashbuckle.AspNetCore.SwaggerUI" Version="9.0.1" />
+	</ItemGroup>
+
+	<ItemGroup>
+		<Folder Include="Controllers\" />
+	</ItemGroup>
+
+</Project>
