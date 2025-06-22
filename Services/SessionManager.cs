@@ -46,7 +46,9 @@ namespace WarpVoice.Services
 
             var userVoices = new DiscordUsersVoice(voiceChannel, audioClient);
 
-            userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession);
+            Task.Run(async () => {
+                await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); 
+            });
             Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
 
             var result = number;

@@ -6,6 +6,7 @@ using Discord.Audio;
 using SIPSorcery.Net;
 using NAudio.Codecs;
 using System.Threading;
+using Concentus;
 
 namespace WarpVoice.Audio
 {
@@ -178,66 +179,88 @@ namespace WarpVoice.Audio
             }
         }
 
-        public void ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession)
+
+        public async Task ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession)
         {
-            var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 60);
-            mediaSession.OnAudioFrameReceived += async (audioFrame) =>
+            int discordFrameSizeSamples = 960;
+
+            // Setup formats
+            var waveFormat8kMono = WaveFormat.CreateCustomFormat(WaveFormatEncoding.Pcm, 8000, 1, 16000, 2, 16);
+
+            var bufferedWaveProvider = new BufferedWaveProvider(waveFormat8kMono)
             {
-                byte[] convertedChunk = ConvertMuLawChunk(audioFrame.EncodedAudio);
+                DiscardOnBufferOverflow = true,
+                BufferLength = waveFormat8kMono.AverageBytesPerSecond * 5 // 5 sec buffer max
+            };
+
+            // Resample 8k mono to 48k mono
+            var resampler = new WdlResamplingSampleProvider(bufferedWaveProvider.ToSampleProvider(), 48000);
+
+            // Buffer for one Discord frame: 960 samples stereo * 2 bytes per sample = 3840 bytes
+            byte[] discordBuffer = new byte[discordFrameSizeSamples * 2 * 2];
+
+            mediaSession.OnAudioFrameReceived += async (frame) =>
+            {
+                var decodedPcmBytes = DecodeMuLaw(frame.EncodedAudio);
+                bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);
+
+            };
+
+            float[] floatBuffer = new float[discordFrameSizeSamples];
+            int samplesRead = 0;
+
+            using var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20);
+
+            while (!_cancellationToken.IsCancellationRequested)
+            {
+                samplesRead = resampler.Read(floatBuffer, 0, discordFrameSizeSamples);
+
+                if (samplesRead < discordFrameSizeSamples)
+                {
+                    // Not enough data yet for a full Discord frame - break and wait for more input
+                    break;
+                }
+
+                // Step 4: Convert mono float samples to stereo PCM16 bytes
+                for (int i = 0; i < discordFrameSizeSamples; i++)
+                {
+                    short sample = FloatToPcm16(floatBuffer[i]);
+                    int byteIndex = i * 4;
+                    discordBuffer[byteIndex] = (byte)(sample & 0xFF);
+                    discordBuffer[byteIndex + 1] = (byte)(sample >> 8);
+                    discordBuffer[byteIndex + 2] = (byte)(sample & 0xFF);
+                    discordBuffer[byteIndex + 3] = (byte)(sample >> 8);
+                }
+
+                // Step 5: Send to Discord
                 try
                 {
-                    await discordStream.WriteAsync(convertedChunk, 0, convertedChunk.Length, _cancellationToken);
+                    await discordStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
                 }
                 catch (OperationCanceledException)
                 {
-
+                    // cancellation handling
+                    break;
                 }
-            };
+            }
         }
 
-        public byte[] ConvertMuLawChunk(byte[] muLawChunk)
+        private byte[] DecodeMuLaw(byte[] muLawBytes)
         {
-            // Step 1: Decode μ-law to 16-bit PCM mono
-            short[] monoPcmSamples = new short[muLawChunk.Length];
-            for (int i = 0; i < muLawChunk.Length; i++)
+            short[] pcmSamples = new short[muLawBytes.Length];
+            for (int i = 0; i < muLawBytes.Length; i++)
             {
-                monoPcmSamples[i] = MuLawDecoder.MuLawToLinearSample(muLawChunk[i]);
+                pcmSamples[i] = MuLawDecoder.MuLawToLinearSample(muLawBytes[i]);
             }
+            byte[] pcmBytes = new byte[pcmSamples.Length * 2];
+            Buffer.BlockCopy(pcmSamples, 0, pcmBytes, 0, pcmBytes.Length);
+            return pcmBytes;
+        }
 
-            // Step 2: Resample from 8000 Hz to 48000 Hz (6x)
-            int inputSampleRate = 8000;
-            int outputSampleRate = 48000;
-            int inputLength = monoPcmSamples.Length;
-            int outputLength = (int)((long)inputLength * outputSampleRate / inputSampleRate);
-
-            short[] resampledMono = new short[outputLength];
-
-            for (int i = 0; i < outputLength; i++)
-            {
-                double srcIndex = (double)i * inputLength / outputLength;
-                int index = (int)Math.Floor(srcIndex);
-                double frac = srcIndex - index;
-
-                short sample1 = monoPcmSamples[Math.Min(index, inputLength - 1)];
-                short sample2 = monoPcmSamples[Math.Min(index + 1, inputLength - 1)];
-
-                resampledMono[i] = (short)(sample1 + (sample2 - sample1) * frac); // Linear interpolation
-            }
-
-            // Step 3: Convert mono to stereo
-            short[] stereoSamples = new short[resampledMono.Length * 2];
-            for (int i = 0; i < resampledMono.Length; i++)
-            {
-                short sample = resampledMono[i];
-                stereoSamples[i * 2] = sample;     // Left
-                stereoSamples[i * 2 + 1] = sample; // Right
-            }
-
-            // Step 4: Convert short[] to byte[]
-            byte[] outputBytes = new byte[stereoSamples.Length * sizeof(short)];
-            Buffer.BlockCopy(stereoSamples, 0, outputBytes, 0, outputBytes.Length);
-
-            return outputBytes;
+        private short FloatToPcm16(float sample)
+        {
+            sample = Math.Clamp(sample, -1f, 1f);
+            return (short)(sample * short.MaxValue);
         }
     }
 }
