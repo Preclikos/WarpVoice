@@ -217,7 +217,7 @@ namespace WarpVoice.Audio
                 if (samplesRead < discordFrameSizeSamples)
                 {
                     // Not enough data yet for a full Discord frame - break and wait for more input
-                    break;
+                    await Task.Delay(20);
                 }
 
                 // Step 4: Convert mono float samples to stereo PCM16 bytes
@@ -239,7 +239,7 @@ namespace WarpVoice.Audio
                 catch (OperationCanceledException)
                 {
                     // cancellation handling
-                    break;
+                    
                 }
             }
         }
