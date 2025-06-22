@@ -1,4 +1,5 @@
-﻿using Discord.WebSocket;
+﻿using Discord;
+using Discord.WebSocket;
 using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
@@ -53,11 +54,11 @@ namespace WarpVoice.Services
             {
                 if (number.StartsWith("420"))
                 {
-                    number = number.Substring(2);
+                    number = number.Substring(3);
                 }
 
-                string pattern = @"^(\d{6})\d{3}$";
-                string replacement = "$1XXX";
+                string pattern = @"(\d{3})$";
+                string replacement = "XXX";
 
                 result = Regex.Replace(number, pattern, replacement);
             }
@@ -73,6 +74,9 @@ namespace WarpVoice.Services
             {
                 await messageChannel.SendMessageAsync($"Receiving call from: {result}");
             }
+
+            //Single node only
+            await _discord.SetGameAsync(result, type: ActivityType.Playing);
 
             //need resolve unregister correctlly
             userAgent.ClientCallFailed += async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
@@ -124,6 +128,8 @@ namespace WarpVoice.Services
         {
             if (_sessions.Remove(guildId, out var session))
             {
+                //Single node only
+                await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening);
                 await session.MessageChannel.SendMessageAsync("Hanged up");
 
                 await session.DiscordVoiceManager.Stop();
