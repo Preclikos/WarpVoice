@@ -9,18 +9,18 @@ using WarpVoice.Services;
 using System.Net;
 using System;
 using SIPSorceryMedia.Abstractions;
+using WarpVoice.Enums;
 
 namespace WarpVoice.HostedServices
 {
     public class VoIPStartupService : IHostedService
     {
-        private readonly DiscordSocketClient _discord;
         private readonly VoIPOptions _voIPOptions;
 
-        private readonly ILogger<DiscordSocketClient> _logger;
+        private readonly ILogger<VoIPStartupService> _logger;
         private readonly SIPRegistrationUserAgent _registrationUserAgent;
 
-        public VoIPStartupService(ILogger<DiscordSocketClient> logger, IOptions<VoIPOptions> voIPOptions, ISipService sipService, ISessionManager sessionManager)
+        public VoIPStartupService(ILogger<VoIPStartupService> logger, IOptions<VoIPOptions> voIPOptions, ISipService sipService, ISessionManager sessionManager)
         {
             _voIPOptions = voIPOptions.Value;
             _logger = logger;
@@ -45,8 +45,9 @@ namespace WarpVoice.HostedServices
 
                 if (sessionManager.CanStartSession(_voIPOptions.GuildId))
                 {
+                    var callerNumber = SIPURI.ParseSIPURIRelaxed(req.Header.From.FromURI.ToString()).User;
                     await userAgent.Answer(uas, mediaSession);
-                    await sessionManager.StartSession(_voIPOptions.GuildId, _voIPOptions.MessageChannelId, _voIPOptions.VoiceChannelId, userAgent, mediaSession, null);
+                    await sessionManager.StartSession(_voIPOptions.GuildId, _voIPOptions.MessageChannelId, _voIPOptions.VoiceChannelId, userAgent, mediaSession, CallDirection.Incoming, callerNumber);
                 }
                 else
                 {

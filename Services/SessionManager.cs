@@ -1,20 +1,26 @@
 ﻿using Discord.WebSocket;
+using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
+using System.Text.RegularExpressions;
+using WarpVoice.Enums;
 using WarpVoice.Models;
+using WarpVoice.Options;
 
 namespace WarpVoice.Services
 {
     public class SessionManager : ISessionManager
     {
         private readonly ConcurrentDictionary<ulong, VoiceSession> _sessions = new();
+        private readonly VoIPOptions _voIpOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
 
-        public SessionManager(DiscordSocketClient discord, ISipService sipService)
+        public SessionManager(DiscordSocketClient discord, ISipService sipService, IOptions<VoIPOptions> voIpOptions)
         {
+            _voIpOptions = voIpOptions.Value;
             _discord = discord;
             _sipService = sipService;
         }
@@ -26,7 +32,7 @@ namespace WarpVoice.Services
             return true;
         }
 
-        public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, RTPSession rtpSession, string number)
+        public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, RTPSession rtpSession, CallDirection direction, string number)
         {
             if (!CanStartSession(guildId)) return false;
 
@@ -42,9 +48,30 @@ namespace WarpVoice.Services
             userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession);
             Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
 
-            if (number != null)
+            var result = number;
+            if (number.Length > 8)
             {
-                await _sipService.MakeCallAsync(rtpSession, number);
+                if (number.StartsWith("420"))
+                {
+                    number = number.Substring(2);
+                }
+
+                string pattern = @"^(\d{6})\d{3}$";
+                string replacement = "$1XXX";
+
+                result = Regex.Replace(number, pattern, replacement);
+            }
+
+            if (direction == CallDirection.Outgoing)
+            {
+                var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
+                await _sipService.MakeCallAsync(rtpSession, destinationUri);
+
+                await messageChannel.SendMessageAsync($"Call to: {result} was started");
+            }
+            else
+            {
+                await messageChannel.SendMessageAsync($"Receiving call from: {result}");
             }
 
             //need resolve unregister correctlly
@@ -69,32 +96,39 @@ namespace WarpVoice.Services
 
         private async Task UserAgent_OnCallHungup(ulong guildId, SIPDialogue sIPDialogue)
         {
-            await EndSession(guildId);
+            await EndSessionInternal(guildId);
         }
 
         private async Task UserAgent_ClientCallFailed(ulong guildId, ISIPClientUserAgent uac, string errorMessage, SIPResponse sipResponse)
         {
-            await EndSession(guildId);
+            await EndSessionInternal(guildId);
         }
 
-        public async Task<bool> EndSession(ulong guildId)
+        public Task EndSession(ulong guildId)
         {
             if (_sessions.TryGetValue(guildId, out var session))
             {
-                if (session.SIPUserAgent.IsCallActive && !session.MediaSession.IsClosed)
+                if (session.SIPUserAgent.IsCallActive)
                 {
                     session.SIPUserAgent.Hangup();
                 }
+                else
+                {
+                    session.SIPUserAgent.Cancel();
+                }
+            }
+            return Task.CompletedTask;
+        }
+
+        private async Task EndSessionInternal(ulong guildId)
+        {
+            if (_sessions.Remove(guildId, out var session))
+            {
+                await session.MessageChannel.SendMessageAsync("Hanged up");
+
                 await session.DiscordVoiceManager.Stop();
                 await session.VoiceChannel.DisconnectAsync();
-
-                _sessions.Remove(guildId, out _);
-
-                return true;
             }
-
-            return false; 
-
         }
 
         public VoiceSession? GetSession(ulong guildId)

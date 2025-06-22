@@ -6,6 +6,7 @@ using SIPSorcery.Net;
 using WarpVoice.Options;
 using System.Net;
 using Microsoft.Extensions.Options;
+using WarpVoice.Enums;
 namespace WarpVoice.Modules
 {
     [RequireContext(ContextType.Guild)]
@@ -28,8 +29,10 @@ namespace WarpVoice.Modules
         [SlashCommand("hangup", "Disconnect current voice call")]
         public async Task HangUp()
         {
-            if (await _sessionManager.EndSession(Context.Guild.Id))
+            var session = _sessionManager.GetSession(Context.Guild.Id);
+            if (session != null)
             {
+                await _sessionManager.EndSession(Context.Guild.Id);
                 await RespondAsync("Call is HangedUp");
             }
             else
@@ -62,9 +65,7 @@ namespace WarpVoice.Modules
             var mediaSession = new RTPSession(false, false, false, localIp, rtpPort);
             mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
 
-            var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
-
-            var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), mediaSession, destinationUri);
+            var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), mediaSession, CallDirection.Outgoing, number);
 
             if (result)
             {
