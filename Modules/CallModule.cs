@@ -29,33 +29,35 @@ namespace WarpVoice.Modules
         [SlashCommand("hangup", "Disconnect current voice call")]
         public async Task HangUp()
         {
+            await DeferAsync().ConfigureAwait(false);
             var session = _sessionManager.GetSession(Context.Guild.Id);
             if (session != null)
             {
                 await _sessionManager.EndSession(Context.Guild.Id);
-                await RespondAsync("Call is HangedUp");
+                await FollowupAsync("Call is HangedUp");
             }
             else
             {
-                await RespondAsync("There is no running Call");
+                await FollowupAsync("There is no running Call");
             }
         }
 
         [SlashCommand("call", "Call from the current voice channel connected to")]
         public async Task Call(string number)
         {
+            await DeferAsync().ConfigureAwait(false);
             var user = Context.User as IGuildUser;
             var _voiceChannel = user?.VoiceChannel;
 
             if (_voiceChannel == null)
             {
-                await RespondAsync("You must be in a voice channel.");
+                await FollowupAsync("You must be in a voice channel.");
                 return;
             }
 
             if (!_sessionManager.CanStartSession(Context.Guild.Id))
             {
-                await RespondAsync("Call is already in progress in this server.");
+                await FollowupAsync("Call is already in progress in this server.");
                 return;
             }
 
@@ -69,11 +71,11 @@ namespace WarpVoice.Modules
 
             if (result)
             {
-                await RespondAsync("Starting call");
+                await FollowupAsync("Starting call");
             }
             else
             {
-                await RespondAsync("Something failed");
+                await FollowupAsync("Something failed");
             }
         }
     }

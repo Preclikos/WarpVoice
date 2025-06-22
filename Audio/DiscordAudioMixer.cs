@@ -179,7 +179,6 @@ namespace WarpVoice.Audio
             }
         }
 
-
         public async Task ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession)
         {
             int discordFrameSizeSamples = 960;
