@@ -79,8 +79,11 @@ namespace WarpVoice.Services
             //Single node only
             //await _discord.SetGameAsync(result, type: ActivityType.Playing); //long time needed :( remove it or maybe other
 
-            userAgent.ClientCallFailed += async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
-            userAgent.OnCallHungup += async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
+            SIPCallFailedDelegate callFailedHandler = async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
+            Action<SIPDialogue> hungupHandler = async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
+
+            userAgent.ClientCallFailed += callFailedHandler;
+            userAgent.OnCallHungup += hungupHandler;
 
             var session = new VoiceSession
             {
@@ -90,6 +93,7 @@ namespace WarpVoice.Services
                 AudioClient = audioClient,
                 DiscordVoiceManager = userVoices,
                 SIPUserAgent = userAgent,
+                SIPAgentEvents = (callFailedHandler, hungupHandler),
                 MediaSession = rtpSession,
                 IsSipInUse = true,
                 StartedAt = DateTime.UtcNow
@@ -134,15 +138,22 @@ namespace WarpVoice.Services
 
         private async Task EndSessionInternal(ulong guildId)
         {
-            if (_sessions.Remove(guildId, out var session))
+            if (_sessions.TryGetValue(guildId, out var session))
             {
-                _logger.LogInformation("End session no session!!!!!!!!!!");
                 await session.DiscordVoiceManager.Stop();
                 await session.VoiceChannel.DisconnectAsync();
+
+                session.SIPUserAgent.ClientCallFailed -= session.SIPAgentEvents.callFailedHandler;
+                session.SIPUserAgent.OnCallHungup -= session.SIPAgentEvents.hungupHandler;
 
                 //Single node only
                 //await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening); //long time needed :( remove it or maybe other
                 await session.MessageChannel.SendMessageAsync("Hanged up");
+
+                if (!_sessions.Remove(guildId, out var _))
+                {
+                    _logger.LogInformation("End session no session!!!!!!!!!!");
+                }
             }
             else
             {
