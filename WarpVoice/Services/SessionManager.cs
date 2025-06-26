@@ -152,7 +152,7 @@ namespace WarpVoice.Services
 
                 if (!_sessions.Remove(guildId, out var _))
                 {
-                    _logger.LogInformation("End session no session!!!!!!!!!!");
+                    _logger.LogError("End session no session!!!!!!!!!!");
                 }
             }
             else
