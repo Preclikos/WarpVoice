@@ -147,7 +147,7 @@ namespace WarpVoice.Audio
 
                 try
                 {
-                    if (mediaSession.AudioDestinationEndPoint != null)
+                    if (mediaSession.IsAudioStarted && !mediaSession.IsClosed)
                     {
                         mediaSession.SendAudio((uint)ulawBytes.rtpDuration, ulawBytes.ulawBytes);
                     }
@@ -232,12 +232,15 @@ namespace WarpVoice.Audio
                 // Step 5: Send to Discord
                 try
                 {
-                    await discordStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
+                    if (audioClient.ConnectionState == Discord.ConnectionState.Connected)
+                    {
+                        await discordStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
+                    }
                 }
                 catch (OperationCanceledException)
                 {
                     // cancellation handling
-                    
+
                 }
             }
         }
