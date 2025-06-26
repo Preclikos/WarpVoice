@@ -109,8 +109,8 @@ namespace WarpVoice.Services
             if (_sessions.TryAdd(guildId, session))
             {
                 _logger.LogInformation("Session added");
-                Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
-                Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
                 return true;
             }
 

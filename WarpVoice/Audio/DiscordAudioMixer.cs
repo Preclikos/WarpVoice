@@ -70,7 +70,7 @@ namespace WarpVoice.Audio
             return floatSamples;
         }
 
-        public async Task FeedUserFrameAsync(ulong userId, byte[] opusPayload, long rtpTimestamp)
+        public void FeedUserFrameAsync(ulong userId, byte[] opusPayload, long rtpTimestamp)
         {
             if (!_userBuffers.TryGetValue(userId, out var buffer))
             {
@@ -86,7 +86,7 @@ namespace WarpVoice.Audio
 
             var floatSamples = ConvertPcm16ToFloat(opusPayload);
 
-            buffer.AddFrame(new TimestampedFrame
+            buffer?.AddFrame(new TimestampedFrame
             {
                 SampleTimestamp = (rtpTimestamp - userBaseRtpTimestamp) + 960,
                 Samples = floatSamples
@@ -196,7 +196,7 @@ namespace WarpVoice.Audio
             // Buffer for one Discord frame: 960 samples stereo * 2 bytes per sample = 3840 bytes
             byte[] discordBuffer = new byte[discordFrameSizeSamples * 2 * 2];
 
-            mediaSession.OnAudioFrameReceived += async (frame) =>
+            mediaSession.OnAudioFrameReceived += (frame) =>
             {
                 var decodedPcmBytes = DecodeMuLaw(frame.EncodedAudio);
                 bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);

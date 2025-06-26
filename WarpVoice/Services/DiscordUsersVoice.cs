@@ -106,7 +106,7 @@ namespace WarpVoice.Services
                         var frame = await stream.ReadFrameAsync(token);
                         if (frame.Payload.Length > 0)
                         {
-                            await _mixer.FeedUserFrameAsync(userId, frame.Payload, frame.Timestamp);
+                            _mixer.FeedUserFrameAsync(userId, frame.Payload, frame.Timestamp);
                         }
                     }
                     else

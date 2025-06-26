@@ -80,7 +80,7 @@ namespace WarpVoice.Modules
             }
         }
 
-        [SlashCommand("callto", "Choose who whant to call")]
+        [SlashCommand("call-to", "Choose who whant to call")]
         public async Task CallTo([Autocomplete(typeof(ChoiceAutocompleteHandler))] string name)
         {
             await DeferAsync().ConfigureAwait(false);

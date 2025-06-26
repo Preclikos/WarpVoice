@@ -7,7 +7,7 @@ namespace WarpVoice.Modules
 {
     public class ChoiceAutocompleteHandler : AutocompleteHandler
     {
-        public override async Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
+        public override Task<AutocompletionResult> GenerateSuggestionsAsync(IInteractionContext context, IAutocompleteInteraction autocompleteInteraction, IParameterInfo parameter, IServiceProvider services)
         {
             string userInput = autocompleteInteraction.Data.Current.Value?.ToString() ?? "";
             var options = services.GetRequiredService<IOptions<AddressBookOptions>>();
@@ -18,7 +18,7 @@ namespace WarpVoice.Modules
                 .Take(5) // Discord limits to 25 suggestions max
                 .Select(kvp => new AutocompleteResult(kvp.Key, kvp.Value));
 
-            return AutocompletionResult.FromSuccess(matchingOptions);
+            return Task.FromResult(AutocompletionResult.FromSuccess(matchingOptions));
         }
     }
 }

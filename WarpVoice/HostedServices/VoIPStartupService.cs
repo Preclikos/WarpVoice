@@ -76,14 +76,16 @@ namespace WarpVoice.HostedServices
             };
         }
 
-        public async Task StartAsync(CancellationToken cancellationToken)
+        public Task StartAsync(CancellationToken cancellationToken)
         {
             _registrationUserAgent.Start();
+            return Task.CompletedTask;
         }
 
-        public async Task StopAsync(CancellationToken cancellationToken)
+        public Task StopAsync(CancellationToken cancellationToken)
         {
             _registrationUserAgent.Stop();
+            return Task.CompletedTask;
         }
     }
 }
