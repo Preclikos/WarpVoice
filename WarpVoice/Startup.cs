@@ -7,9 +7,6 @@ using Discord.WebSocket;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using SIPSorcery.SIP;
-using Serilog;
-using Serilog.Extensions.Logging;
 
 namespace WarpVoice
 {
@@ -25,15 +22,7 @@ namespace WarpVoice
         {
             services.Configure<DiscordOptions>(Configuration.GetSection(DiscordOptions.Discord));
             services.Configure<VoIPOptions>(Configuration.GetSection(VoIPOptions.VoIP));
-
-            var logger = new LoggerConfiguration()
-                .Enrich.FromLogContext()
-                .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
-                .WriteTo.Console()
-                .CreateLogger();
-
-            var factory = new SerilogLoggerFactory(logger);
-            SIPSorcery.LogFactory.Set(factory);
+            services.Configure<AddressBookOptions>(Configuration.GetSection(AddressBookOptions.AddressBook));
 
             services.AddControllers()
                 .AddNewtonsoftJson(options =>
@@ -79,6 +68,9 @@ namespace WarpVoice
 
         public void Configure(IApplicationBuilder app, IWebHostEnvironment env)
         {
+            var loggerFactory = app.ApplicationServices.GetRequiredService<ILoggerFactory>();
+            SIPSorcery.LogFactory.Set(loggerFactory);
+
             if (!env.IsDevelopment())
             {
                 app.UseDeveloperExceptionPage();

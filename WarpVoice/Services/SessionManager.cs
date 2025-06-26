@@ -19,14 +19,19 @@ namespace WarpVoice.Services
         private readonly ILogger<SessionManager> _logger;
         private readonly ILogger<DiscordUsersVoice> _loggerDiscordUsersVoice;
         private readonly VoIPOptions _voIpOptions;
+        private readonly AddressBookOptions _addressBookOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
 
-        public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, DiscordSocketClient discord, ISipService sipService, IOptions<VoIPOptions> voIpOptions)
+        public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice,
+            IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions,
+            DiscordSocketClient discord, ISipService sipService
+            )
         {
             _logger = logger;
             _loggerDiscordUsersVoice = loggerDiscordUsersVoice;
             _voIpOptions = voIpOptions.Value;
+            _addressBookOptions = addressBookOptions.Value;
             _discord = discord;
             _sipService = sipService;
         }
@@ -61,7 +66,9 @@ namespace WarpVoice.Services
                 string pattern = @"(\d{3})$";
                 string replacement = "XXX";
 
-                result = Regex.Replace(number, pattern, replacement);
+                result = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
+                    _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
+                    Regex.Replace(number, pattern, replacement);
             }
 
             if (direction == CallDirection.Outgoing)

@@ -7,6 +7,7 @@ using WarpVoice.Options;
 using System.Net;
 using Microsoft.Extensions.Options;
 using WarpVoice.Enums;
+using static System.Runtime.InteropServices.JavaScript.JSType;
 namespace WarpVoice.Modules
 {
     [RequireContext(ContextType.Guild)]
@@ -42,7 +43,7 @@ namespace WarpVoice.Modules
             }
         }
 
-        [SlashCommand("call", "Call from the current voice channel connected to")]
+        [SlashCommand("call", "Call to number")]
         public async Task Call(string number)
         {
             await DeferAsync().ConfigureAwait(false);
@@ -68,6 +69,43 @@ namespace WarpVoice.Modules
             mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
 
             var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), mediaSession, CallDirection.Outgoing, number);
+
+            if (result)
+            {
+                await FollowupAsync("Starting call");
+            }
+            else
+            {
+                await FollowupAsync("Something failed");
+            }
+        }
+
+        [SlashCommand("callto", "Choose who whant to call")]
+        public async Task CallTo([Autocomplete(typeof(ChoiceAutocompleteHandler))] string name)
+        {
+            await DeferAsync().ConfigureAwait(false);
+            var user = Context.User as IGuildUser;
+            var _voiceChannel = user?.VoiceChannel;
+
+            if (_voiceChannel == null)
+            {
+                await FollowupAsync("You must be in a voice channel.");
+                return;
+            }
+
+            if (!_sessionManager.CanStartSession(Context.Guild.Id))
+            {
+                await FollowupAsync("Call is already in progress in this server.");
+                return;
+            }
+
+            IPAddress localIp = IPAddress.Parse(_voIpOptions.RtpIp);
+            int rtpPort = _voIpOptions.RtpPort;
+
+            var mediaSession = new RTPSession(false, false, false, localIp, rtpPort);
+            mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
+
+            var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), mediaSession, CallDirection.Outgoing, name);
 
             if (result)
             {
