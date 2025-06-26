@@ -8,6 +8,7 @@ namespace WarpVoice.Services
     {
         private readonly CancellationTokenSource cancellationToken = new CancellationTokenSource();
         private readonly Dictionary<ulong, UserStreamHandler> _userHandlers = new();
+        private readonly ILogger<DiscordUsersVoice> _logger;
         private DiscordAudioMixer _mixer;
         private readonly IAudioClient _audioClient;
 
@@ -28,8 +29,9 @@ namespace WarpVoice.Services
             return _mixer;
         }
 
-        public DiscordUsersVoice(IVoiceChannel voiceChannel, IAudioClient audioClient)
+        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, IVoiceChannel voiceChannel, IAudioClient audioClient)
         {
+            _logger = logger;
             _mixer = new DiscordAudioMixer(cancellationToken.Token);
             _audioClient = audioClient;
 
@@ -51,11 +53,11 @@ namespace WarpVoice.Services
                             {
                                 var stream = streams.Single(s => s.Key == member.Id).Value;
                                 await StartUserStream(member.Id, stream);
-                                Console.WriteLine($"[INIT] Added user: {member.Username}");
+                                logger.LogInformation($"[INIT] Added user: {member.Username}");
                             }
                             catch
                             {
-                                Console.WriteLine($"[WARN] Could not get stream for: {member.Username}");
+                                logger.LogWarning($"Could not get stream for: {member.Username}");
                             }
                         }
                     }
@@ -71,7 +73,7 @@ namespace WarpVoice.Services
                 handler.CancellationTokenSource.Cancel();
                 _userHandlers.Remove(userId);
                 _mixer.RemoveUserStream(userId);
-                Console.WriteLine($"[LEAVE] {userId}");
+                _logger.LogInformation($"[LEAVE] {userId}");
             }
 
             return Task.CompletedTask;
@@ -79,7 +81,7 @@ namespace WarpVoice.Services
 
         private Task StartUserStream(ulong userId, AudioInStream stream)
         {
-            Console.WriteLine("New stream for user " + userId);
+            _logger.LogInformation("New stream for user " + userId);
             CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken.Token);
             var handler = new UserStreamHandler
             {
@@ -89,7 +91,7 @@ namespace WarpVoice.Services
             };
 
             _userHandlers[userId] = handler;
-            Console.WriteLine($"[JOIN] {userId}");
+            _logger.LogInformation($"[JOIN] {userId}");
             return Task.CompletedTask;
         }
 
@@ -118,12 +120,12 @@ namespace WarpVoice.Services
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[Stream Error] {userId}: {ex.Message}");
+                    _logger.LogError($"Stream {userId}: {ex.Message}");
                     break;
                 }
             }
 
-            Console.WriteLine($"[INFO] Audio stream stopped for user {userId}");
+            _logger.LogInformation($"Audio stream stopped for user {userId}");
         }
     }
 }

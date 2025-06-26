@@ -35,7 +35,7 @@ namespace WarpVoice.HostedServices
                 300);
 
             var userAgent = sipService.GetUserAgent();
-            userAgent.ServerCallCancelled += (uas, cancelReq) => logger.LogDebug("Incoming call cancelled by remote party.");
+            userAgent.ServerCallCancelled += (uas, cancelReq) => logger.LogInformation("Incoming call cancelled by remote party.");
             userAgent.OnIncomingCall += async (ua, req) =>
             {
                 var mediaSession = new RTPSession(false, false, false);
@@ -61,18 +61,18 @@ namespace WarpVoice.HostedServices
                 {
                     var okResponse = SIPResponse.GetResponse(sipRequest, SIPResponseStatusCodesEnum.Ok, null);
                     await sipTransport.SendResponseAsync(okResponse);
-                    Console.WriteLine("✅ Responded to OPTIONS ping.");
+                    logger.LogInformation("✅ Responded to OPTIONS ping.");
                 }
             };
 
             _registrationUserAgent.RegistrationFailed += (uri, resp, err) =>
             {
-                Console.WriteLine($"❌ Registration failed: {resp?.StatusCode} {resp?.ReasonPhrase} | {err}");
+                logger.LogError($"❌ Registration failed: {resp?.StatusCode} {resp?.ReasonPhrase} | {err}");
             };
 
             _registrationUserAgent.RegistrationSuccessful += (uri, response) =>
             {
-                Console.WriteLine("✅ Registration succeeded.");
+                logger.LogInformation("✅ Registration succeeded.");
             };
         }
 

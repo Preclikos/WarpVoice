@@ -5,6 +5,7 @@ using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.RegularExpressions;
 using WarpVoice.Enums;
 using WarpVoice.Models;
@@ -15,12 +16,16 @@ namespace WarpVoice.Services
     public class SessionManager : ISessionManager
     {
         private readonly ConcurrentDictionary<ulong, VoiceSession> _sessions = new();
+        private readonly ILogger<SessionManager> _logger;
+        private readonly ILogger<DiscordUsersVoice> _loggerDiscordUsersVoice;
         private readonly VoIPOptions _voIpOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
 
-        public SessionManager(DiscordSocketClient discord, ISipService sipService, IOptions<VoIPOptions> voIpOptions)
+        public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, DiscordSocketClient discord, ISipService sipService, IOptions<VoIPOptions> voIpOptions)
         {
+            _logger = logger;
+            _loggerDiscordUsersVoice = loggerDiscordUsersVoice;
             _voIpOptions = voIpOptions.Value;
             _discord = discord;
             _sipService = sipService;
@@ -43,11 +48,7 @@ namespace WarpVoice.Services
             var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
 
             var audioClient = await voiceChannel.ConnectAsync();
-
-            var userVoices = new DiscordUsersVoice(voiceChannel, audioClient);
-
-            Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
-            Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
+            var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, voiceChannel, audioClient);
 
             var result = number;
             if (number.Length > 8)
@@ -76,9 +77,8 @@ namespace WarpVoice.Services
             }
 
             //Single node only
-            await _discord.SetGameAsync(result, type: ActivityType.Playing);
+            //await _discord.SetGameAsync(result, type: ActivityType.Playing); //long time needed :( remove it or maybe other
 
-            //need resolve unregister correctlly
             userAgent.ClientCallFailed += async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
             userAgent.OnCallHungup += async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
 
@@ -95,7 +95,15 @@ namespace WarpVoice.Services
                 StartedAt = DateTime.UtcNow
             };
 
-            return _sessions.TryAdd(guildId, session);
+            if (_sessions.TryAdd(guildId, session))
+            {
+                _logger.LogInformation("Session added");
+                Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
+                Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
+                return true;
+            }
+
+            return false;
         }
 
         private async Task UserAgent_OnCallHungup(ulong guildId, SIPDialogue sIPDialogue)
@@ -128,12 +136,17 @@ namespace WarpVoice.Services
         {
             if (_sessions.Remove(guildId, out var session))
             {
-                //Single node only
-                await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening);
-                await session.MessageChannel.SendMessageAsync("Hanged up");
-
+                _logger.LogInformation("End session no session!!!!!!!!!!");
                 await session.DiscordVoiceManager.Stop();
                 await session.VoiceChannel.DisconnectAsync();
+
+                //Single node only
+                //await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening); //long time needed :( remove it or maybe other
+                await session.MessageChannel.SendMessageAsync("Hanged up");
+            }
+            else
+            {
+                _logger.LogInformation("End session no session!!!!!!!!!!");
             }
         }
 

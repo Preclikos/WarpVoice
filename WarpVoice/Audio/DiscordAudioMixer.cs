@@ -5,8 +5,6 @@ using System.Diagnostics;
 using Discord.Audio;
 using SIPSorcery.Net;
 using NAudio.Codecs;
-using System.Threading;
-using Concentus;
 
 namespace WarpVoice.Audio
 {

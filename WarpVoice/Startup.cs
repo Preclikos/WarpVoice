@@ -8,6 +8,8 @@ using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using SIPSorcery.SIP;
+using Serilog;
+using Serilog.Extensions.Logging;
 
 namespace WarpVoice
 {
@@ -23,6 +25,15 @@ namespace WarpVoice
         {
             services.Configure<DiscordOptions>(Configuration.GetSection(DiscordOptions.Discord));
             services.Configure<VoIPOptions>(Configuration.GetSection(VoIPOptions.VoIP));
+
+            var logger = new LoggerConfiguration()
+                .Enrich.FromLogContext()
+                .MinimumLevel.Is(Serilog.Events.LogEventLevel.Debug)
+                .WriteTo.Console()
+                .CreateLogger();
+
+            var factory = new SerilogLoggerFactory(logger);
+            SIPSorcery.LogFactory.Set(factory);
 
             services.AddControllers()
                 .AddNewtonsoftJson(options =>

@@ -1,9 +1,6 @@
 ﻿using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using SIPSorcery.Net;
-using System.Net;
-using SIPSorceryMedia.Abstractions;
-using NAudio.Wave;
 using WarpVoice.Options;
 using Microsoft.Extensions.Options;
 
@@ -22,7 +19,6 @@ namespace WarpVoice.Services
 
             _logger = logger;
             _sipTransport = new SIPTransport();
-            //EnableTraceLogs(_sipTransport);
             _userAgent = new SIPUserAgent(_sipTransport, null);
         }
 
@@ -55,43 +51,6 @@ namespace WarpVoice.Services
             await _userAgent.InitiateCallAsync(callDescriptor, mediaSession);
 
             return mediaSession;
-        }
-
-        private void EnableTraceLogs(SIPTransport sipTransport)
-        {
-            sipTransport.SIPRequestInTraceEvent += (localEP, remoteEP, req) =>
-            {
-                Console.WriteLine($"Request received: {localEP}<-{remoteEP}");
-                Console.WriteLine(req.ToString());
-            };
-
-            sipTransport.SIPRequestOutTraceEvent += (localEP, remoteEP, req) =>
-            {
-                Console.WriteLine($"Request sent: {localEP}->{remoteEP}");
-                Console.WriteLine(req.ToString());
-            };
-
-            sipTransport.SIPResponseInTraceEvent += (localEP, remoteEP, resp) =>
-            {
-                Console.WriteLine($"Response received: {localEP}<-{remoteEP}");
-                Console.WriteLine(resp.ToString());
-            };
-
-            sipTransport.SIPResponseOutTraceEvent += (localEP, remoteEP, resp) =>
-            {
-                Console.WriteLine($"Response sent: {localEP}->{remoteEP}");
-                Console.WriteLine(resp.ToString());
-            };
-
-            sipTransport.SIPRequestRetransmitTraceEvent += (tx, req, count) =>
-            {
-                Console.WriteLine($"Request retransmit {count} for request {req.StatusLine}, initial transmit {DateTime.Now.Subtract(tx.InitialTransmit).TotalSeconds:0.###}s ago.");
-            };
-
-            sipTransport.SIPResponseRetransmitTraceEvent += (tx, resp, count) =>
-            {
-                Console.WriteLine($"Response retransmit {count} for response {resp.ShortDescription}, initial transmit {DateTime.Now.Subtract(tx.InitialTransmit).TotalSeconds:0.###}s ago.");
-            };
         }
 
         public void Hangup()
