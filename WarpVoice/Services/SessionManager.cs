@@ -7,6 +7,7 @@ using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
+using WarpVoice.Audio;
 using WarpVoice.Enums;
 using WarpVoice.Models;
 using WarpVoice.Options;
@@ -18,18 +19,20 @@ namespace WarpVoice.Services
         private readonly ConcurrentDictionary<ulong, VoiceSession> _sessions = new();
         private readonly ILogger<SessionManager> _logger;
         private readonly ILogger<DiscordUsersVoice> _loggerDiscordUsersVoice;
+        private readonly ILogger<DiscordAudioMixer> _loggerDiscordAudioMixer;
         private readonly VoIPOptions _voIpOptions;
         private readonly AddressBookOptions _addressBookOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
 
-        public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice,
+        public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer,
             IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions,
             DiscordSocketClient discord, ISipService sipService
             )
         {
             _logger = logger;
             _loggerDiscordUsersVoice = loggerDiscordUsersVoice;
+            _loggerDiscordAudioMixer = loggerDiscordAudioMixer;
             _voIpOptions = voIpOptions.Value;
             _addressBookOptions = addressBookOptions.Value;
             _discord = discord;
@@ -53,7 +56,7 @@ namespace WarpVoice.Services
             var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
 
             var audioClient = await voiceChannel.ConnectAsync();
-            var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, voiceChannel, audioClient);
+            var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, voiceChannel, audioClient);
 
             var result = number;
             if (number.Length > 8)

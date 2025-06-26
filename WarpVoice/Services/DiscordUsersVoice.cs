@@ -9,6 +9,7 @@ namespace WarpVoice.Services
         private readonly CancellationTokenSource cancellationToken = new CancellationTokenSource();
         private readonly Dictionary<ulong, UserStreamHandler> _userHandlers = new();
         private readonly ILogger<DiscordUsersVoice> _logger;
+        private readonly ILogger<DiscordAudioMixer> _loggerDiscordAudioMixer;
         private DiscordAudioMixer _mixer;
         private readonly IAudioClient _audioClient;
 
@@ -29,10 +30,11 @@ namespace WarpVoice.Services
             return _mixer;
         }
 
-        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, IVoiceChannel voiceChannel, IAudioClient audioClient)
+        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, IVoiceChannel voiceChannel, IAudioClient audioClient)
         {
             _logger = logger;
-            _mixer = new DiscordAudioMixer(cancellationToken.Token);
+            _loggerDiscordAudioMixer = loggerDiscordAudioMixer;
+            _mixer = new DiscordAudioMixer(_loggerDiscordAudioMixer, cancellationToken.Token);
             _audioClient = audioClient;
 
             _audioClient.StreamCreated += StartUserStream;

@@ -14,12 +14,14 @@ namespace WarpVoice.Audio
         private readonly ConcurrentDictionary<ulong, long> _startTimeStamp = new();
         private readonly ConcurrentDictionary<ulong, DateTime> _startDateTime = new();
         private readonly ConcurrentDictionary<ulong, TimestampAlignedSampleProvider> _userInputs = new();
+        private readonly ILogger<DiscordAudioMixer> _logger;
         private readonly CancellationToken _cancellationToken;
         private readonly MixingSampleProvider _mixer;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
 
-        public DiscordAudioMixer(CancellationToken cancellationToken)
+        public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, CancellationToken cancellationToken)
         {
+            _logger = logger;
             _cancellationToken = cancellationToken;
             _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
         }
@@ -151,10 +153,14 @@ namespace WarpVoice.Audio
                     {
                         mediaSession.SendAudio((uint)ulawBytes.rtpDuration, ulawBytes.ulawBytes);
                     }
+                    else
+                    {
+                        await Task.Delay(10);
+                    }
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(ex.Message);
+                    _logger.LogError("Call audio send " + ex.Message);
                 }
 
                 iteration++;
@@ -171,8 +177,7 @@ namespace WarpVoice.Audio
                 }
                 else
                 {
-                    // Running behind schedule
-                    Console.WriteLine($"Warning: Audio loop running behind by {-delay}ms");
+                    _logger.LogWarning($"Audio loop running behind by {-delay}ms");
                 }
             }
         }
@@ -236,11 +241,18 @@ namespace WarpVoice.Audio
                     {
                         await discordStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
                     }
+                    else
+                    {
+                        await Task.Delay(10);
+                    }
                 }
-                catch (OperationCanceledException)
+                catch (OperationCanceledException ex)
                 {
-                    // cancellation handling
-
+                    _logger.LogInformation("Discord audio send " + ex.Message);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogError("Discord audio send " + ex.Message);
                 }
             }
         }
