@@ -105,6 +105,8 @@ namespace WarpVoice.Services
                 userAgent.ClientCallFailed += callFailedHandler;
                 userAgent.OnCallHungup += hungupHandler;
 
+                session.SIPAgentEvents = (callFailedHandler, hungupHandler);
+
                 _logger.LogInformation($"{guildId} - Session configured");
 
                 _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
