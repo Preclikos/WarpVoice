@@ -3,29 +3,28 @@ using NAudio.Codecs;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using SIPSorcery.Net;
+using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.Threading;
 
 namespace WarpVoice.Audio
 {
     public class DiscordAudioMixer
     {
+        private readonly ILogger<DiscordAudioMixer> _logger;
+
         private readonly ConcurrentDictionary<ulong, UserAudioBuffer> _userBuffers = new();
         private readonly ConcurrentDictionary<ulong, long> _startTimeStamp = new();
-        private readonly ConcurrentDictionary<ulong, DateTime> _startDateTime = new();
         private readonly ConcurrentDictionary<ulong, TimestampAlignedSampleProvider> _userInputs = new();
-        private readonly ILogger<DiscordAudioMixer> _logger;
+
         private readonly CancellationToken _cancellationToken;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
-        private bool _mixerStarted;
-        private MixingSampleProvider _mixer;
+        private MixingSampleProvider? _mixer;
 
         public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, CancellationToken cancellationToken)
         {
             _logger = logger;
             _cancellationToken = cancellationToken;
-            _mixerStarted = false;
         }
 
         public UserAudioBuffer AddUserStream(ulong userId)
@@ -33,8 +32,10 @@ namespace WarpVoice.Audio
             var buffer = new UserAudioBuffer();
             _userBuffers[userId] = buffer;
             _userInputs[userId] = new TimestampAlignedSampleProvider(buffer, _waveFormat);
-            _mixer.AddMixerInput(_userInputs[userId]);
-
+            if (_mixer != null)
+            {
+                _mixer.AddMixerInput(_userInputs[userId]);
+            }
             return _userBuffers[userId];
         }
 
@@ -42,8 +43,7 @@ namespace WarpVoice.Audio
         {
             _userBuffers.TryRemove(userId, out var buffer);
             _startTimeStamp.TryRemove(userId, out var timeStamp);
-            _startDateTime.TryRemove(userId, out var dateTime);
-            if (_userInputs.TryRemove(userId, out var input))
+            if (_mixer != null && _userInputs.TryRemove(userId, out var input))
             {
                 _mixer.RemoveMixerInput(input);
             }
@@ -76,7 +76,7 @@ namespace WarpVoice.Audio
 
         public void FeedUserFrameAsync(ulong userId, byte[] opusPayload, long rtpTimestamp)
         {
-            if (_mixerStarted)
+            if (_mixer != null)
             {
                 if (!_userBuffers.TryGetValue(userId, out var buffer))
                 {
@@ -138,10 +138,9 @@ namespace WarpVoice.Audio
             return muLawBytes;
         }
         const int targetMs = 20;
-        public async Task StartMixingLoopAsync(IAudioClient audioClient, RTPSession mediaSession)
+        public async Task DiscordToVoIp(IAudioClient audioClient, RTPSession mediaSession)
         {
             _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
-            _mixerStarted = true;
 
             var buffer = new float[960 * 2]; // 20ms stereo float at 48kHz
             DateTime startTime = DateTime.UtcNow;
@@ -181,7 +180,7 @@ namespace WarpVoice.Audio
 
                 if (delay > 0)
                 {
-                    await Task.Delay((int)delay);
+                    await Task.Delay((int)delay, _cancellationToken);
                 }
                 else
                 {
@@ -190,28 +189,26 @@ namespace WarpVoice.Audio
             }
         }
 
-        public async Task ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession, byte[]? initMessage = null)
+        private async Task PlayAudioToDiscord(AudioOutStream audioStream, byte[] bytes)
         {
-            using var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20);
-            if (initMessage != null)
+            using var ms = new MemoryStream(bytes);
+            using (var reader = new WaveFileReader(ms))
             {
-                using var ms = new MemoryStream(initMessage);
-                using (var reader = new WaveFileReader(ms))
-                {
-                    byte[] buffer = new byte[3840]; // 20ms of 48kHz 16-bit stereo PCM
-                    int bytesRead;
+                byte[] buffer = new byte[3840]; // 20ms of 48kHz 16-bit stereo PCM
+                int bytesRead;
 
-                    while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
-                    {
-                        await discordStream.WriteAsync(buffer, 0, bytesRead, _cancellationToken);
-                        await Task.Delay(20);
-                    }
+                while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+                {
+                    await audioStream.WriteAsync(buffer, 0, bytesRead, _cancellationToken);
+                    await Task.Delay(20);
                 }
             }
+        }
 
+        private async Task BridgeVoIpToDiscord(AudioOutStream audioStream, RTPSession mediaSession)
+        {
             int discordFrameSizeSamples = 960;
 
-            // Setup formats
             var waveFormat8kMono = WaveFormat.CreateCustomFormat(WaveFormatEncoding.Pcm, 8000, 1, 16000, 2, 16);
 
             var bufferedWaveProvider = new BufferedWaveProvider(waveFormat8kMono)
@@ -220,10 +217,8 @@ namespace WarpVoice.Audio
                 BufferLength = waveFormat8kMono.AverageBytesPerSecond * 5 // 5 sec buffer max
             };
 
-            // Resample 8k mono to 48k mono
             var resampler = new WdlResamplingSampleProvider(bufferedWaveProvider.ToSampleProvider(), 48000);
 
-            // Buffer for one Discord frame: 960 samples stereo * 2 bytes per sample = 3840 bytes
             byte[] discordBuffer = new byte[discordFrameSizeSamples * 2 * 2];
 
             mediaSession.OnAudioFrameReceived += (frame) =>
@@ -245,7 +240,6 @@ namespace WarpVoice.Audio
                     await Task.Delay(20);
                 }
 
-                // Step 4: Convert mono float samples to stereo PCM16 bytes
                 for (int i = 0; i < discordFrameSizeSamples; i++)
                 {
                     short sample = FloatToPcm16(floatBuffer[i]);
@@ -256,17 +250,9 @@ namespace WarpVoice.Audio
                     discordBuffer[byteIndex + 3] = (byte)(sample >> 8);
                 }
 
-                // Step 5: Send to Discord
                 try
                 {
-                    if (audioClient.ConnectionState == Discord.ConnectionState.Connected)
-                    {
-                        await discordStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
-                    }
-                    else
-                    {
-                        await Task.Delay(10);
-                    }
+                    await audioStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
                 }
                 catch (OperationCanceledException ex)
                 {
@@ -279,12 +265,39 @@ namespace WarpVoice.Audio
             }
         }
 
+        public async Task VoIpToDiscord(IAudioClient audioClient, SIPUserAgent userAgent, SIPServerUserAgent? serverUserAgent, RTPSession mediaSession)
+        {
+
+            using (var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20))
+            {
+                //Play whatever on discord before accept
+                if (serverUserAgent != null)
+                {
+                    await userAgent.Answer(serverUserAgent, mediaSession);
+                }
+
+                await BridgeVoIpToDiscord(discordStream, mediaSession);
+            }
+        }
+
         private byte[] DecodeMuLaw(byte[] muLawBytes)
         {
             short[] pcmSamples = new short[muLawBytes.Length];
             for (int i = 0; i < muLawBytes.Length; i++)
             {
                 pcmSamples[i] = MuLawDecoder.MuLawToLinearSample(muLawBytes[i]);
+            }
+            byte[] pcmBytes = new byte[pcmSamples.Length * 2];
+            Buffer.BlockCopy(pcmSamples, 0, pcmBytes, 0, pcmBytes.Length);
+            return pcmBytes;
+        }
+
+        private byte[] DecodeALaw(byte[] aLawBytes)
+        {
+            short[] pcmSamples = new short[aLawBytes.Length];
+            for (int i = 0; i < aLawBytes.Length; i++)
+            {
+                pcmSamples[i] = ALawDecoder.ALawToLinearSample(aLawBytes[i]);
             }
             byte[] pcmBytes = new byte[pcmSamples.Length * 2];
             Buffer.BlockCopy(pcmSamples, 0, pcmBytes, 0, pcmBytes.Length);

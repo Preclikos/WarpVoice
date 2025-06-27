@@ -1,5 +1,5 @@
-﻿using NAudio.Wave.SampleProviders;
-using NAudio.Wave;
+﻿using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
 using System.Diagnostics;
 
 namespace WarpVoice.TTS
@@ -60,7 +60,11 @@ namespace WarpVoice.TTS
                 if (process.ExitCode != 0)
                     throw new Exception($"Piper exited with code {process.ExitCode}");
 
-                return PiperTTS.ResampleWavTo48kHzStereo(fileName);
+                var data = PiperTTS.ResampleWavTo48kHzStereo(fileName);
+
+                File.Delete(fileName);
+
+                return data;
             }
         }
         public static byte[] ResampleWavTo48kHzStereo(string inputFile)

@@ -42,12 +42,8 @@ namespace WarpVoice.HostedServices
                 if (sessionManager.CanStartSession(_voIPOptions.GuildId))
                 {
                     var callerNumber = SIPURI.ParseSIPURIRelaxed(req.Header.From.FromURI.ToString()).User;
-                    var sessionResult = await sessionManager.StartSession(_voIPOptions.GuildId, _voIPOptions.MessageChannelId, _voIPOptions.VoiceChannelId, userAgent, mediaSession, CallDirection.Incoming, callerNumber);
-                    if (sessionResult)
-                    {
-                        await userAgent.Answer(uas, mediaSession);
-                    }
-                    else
+                    var sessionResult = await sessionManager.StartSession(_voIPOptions.GuildId, _voIPOptions.MessageChannelId, _voIPOptions.VoiceChannelId, userAgent, uas, mediaSession, CallDirection.Incoming, callerNumber);
+                    if (!sessionResult)
                     {
                         uas.Reject(SIPResponseStatusCodesEnum.BusyHere, null, null);
                     }

@@ -9,7 +9,6 @@ using WarpVoice.Audio;
 using WarpVoice.Enums;
 using WarpVoice.Models;
 using WarpVoice.Options;
-using WarpVoice.TTS;
 
 namespace WarpVoice.Services
 {
@@ -23,7 +22,6 @@ namespace WarpVoice.Services
         private readonly AddressBookOptions _addressBookOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
-        private readonly PiperTTS _piperTTS;
 
         public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer,
             IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions,
@@ -37,7 +35,6 @@ namespace WarpVoice.Services
             _addressBookOptions = addressBookOptions.Value;
             _discord = discord;
             _sipService = sipService;
-            _piperTTS = new PiperTTS();
         }
 
         public bool CanStartSession(ulong guildId)
@@ -47,7 +44,7 @@ namespace WarpVoice.Services
             return true;
         }
 
-        public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, RTPSession rtpSession, CallDirection direction, string number)
+        public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, SIPServerUserAgent? serverUserAgent, RTPSession rtpSession, CallDirection direction, string number)
         {
             if (!CanStartSession(guildId)) return false;
             var session = new VoiceSession(guildId, userAgent, rtpSession);
@@ -92,7 +89,7 @@ namespace WarpVoice.Services
                 }
                 else
                 {
-                    callerNumber = _piperTTS.Synthesize("Receiving call from " + string.Join(" ", number.ToCharArray()));
+                    //callerNumber = _piperTTS.Synthesize("Receiving call from " + string.Join(" ", number.ToCharArray()));
                     await messageChannel.SendMessageAsync($"Receiving: {result}");
                 }
 
@@ -109,8 +106,8 @@ namespace WarpVoice.Services
 
                 _logger.LogInformation($"{guildId} - Session configured");
 
-                _ = Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
-                _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession, callerNumber); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().DiscordToVoIp(audioClient, rtpSession); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().VoIpToDiscord(audioClient, userAgent, serverUserAgent, rtpSession); });
 
                 _logger.LogInformation($"{guildId} - Session audio started");
                 return true;
