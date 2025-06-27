@@ -31,7 +31,11 @@ namespace WarpVoice.HostedServices
                 300);
 
             var userAgent = sipService.GetUserAgent();
-            userAgent.ServerCallCancelled += (uas, cancelReq) => logger.LogInformation("Incoming call cancelled by remote party.");
+            userAgent.ServerCallCancelled += async (uas, cancelReq) =>
+            {
+                await sessionManager.EndSessionDiscord(_voIPOptions.GuildId);
+                logger.LogInformation("Incoming call cancelled by remote party.");
+            };
             userAgent.OnIncomingCall += async (ua, req) =>
             {
                 var mediaSession = new RTPSession(false, false, false);

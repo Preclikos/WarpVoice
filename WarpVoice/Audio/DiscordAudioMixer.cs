@@ -6,6 +6,8 @@ using SIPSorcery.Net;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.IO.Pipelines;
+using WarpVoice.TTS;
 
 namespace WarpVoice.Audio
 {
@@ -18,6 +20,7 @@ namespace WarpVoice.Audio
         private readonly ConcurrentDictionary<ulong, TimestampAlignedSampleProvider> _userInputs = new();
 
         private readonly CancellationToken _cancellationToken;
+        private readonly PiperTTS _piper;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
         private MixingSampleProvider? _mixer;
 
@@ -25,6 +28,7 @@ namespace WarpVoice.Audio
         {
             _logger = logger;
             _cancellationToken = cancellationToken;
+            _piper = new PiperTTS();
         }
 
         public UserAudioBuffer AddUserStream(ulong userId)
@@ -200,7 +204,6 @@ namespace WarpVoice.Audio
                 while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
                 {
                     await audioStream.WriteAsync(buffer, 0, bytesRead, _cancellationToken);
-                    await Task.Delay(20);
                 }
             }
         }
@@ -265,14 +268,17 @@ namespace WarpVoice.Audio
             }
         }
 
-        public async Task VoIpToDiscord(IAudioClient audioClient, SIPUserAgent userAgent, SIPServerUserAgent? serverUserAgent, RTPSession mediaSession)
+        public async Task VoIpToDiscord(IAudioClient audioClient, SIPUserAgent userAgent, SIPServerUserAgent? serverUserAgent, RTPSession mediaSession, string number)
         {
-
             using (var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20))
             {
                 //Play whatever on discord before accept
                 if (serverUserAgent != null)
                 {
+
+                    var data = _piper.Synthesize("Receiving call from:" + number);
+                    await PlayAudioToDiscord(discordStream, data);
+
                     await userAgent.Answer(serverUserAgent, mediaSession);
                 }
 

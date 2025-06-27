@@ -79,7 +79,7 @@ namespace WarpVoice.Services
                     _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
                    number.Length > 8 ? Regex.Replace(number, pattern, replacement) : number;
 
-                byte[]? callerNumber = null;
+                var callerNumber = String.Empty;
                 if (direction == CallDirection.Outgoing)
                 {
                     var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
@@ -89,7 +89,9 @@ namespace WarpVoice.Services
                 }
                 else
                 {
-                    //callerNumber = _piperTTS.Synthesize("Receiving call from " + string.Join(" ", number.ToCharArray()));
+                    callerNumber = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
+                        _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
+                        string.Join(" ", number.ToCharArray());
                     await messageChannel.SendMessageAsync($"Receiving: {result}");
                 }
 
@@ -107,7 +109,7 @@ namespace WarpVoice.Services
                 _logger.LogInformation($"{guildId} - Session configured");
 
                 _ = Task.Run(async () => { await userVoices.GetMixer().DiscordToVoIp(audioClient, rtpSession); });
-                _ = Task.Run(async () => { await userVoices.GetMixer().VoIpToDiscord(audioClient, userAgent, serverUserAgent, rtpSession); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().VoIpToDiscord(audioClient, userAgent, serverUserAgent, rtpSession, callerNumber); });
 
                 _logger.LogInformation($"{guildId} - Session audio started");
                 return true;
@@ -118,15 +120,15 @@ namespace WarpVoice.Services
 
         private async Task UserAgent_OnCallHungup(ulong guildId, SIPDialogue sIPDialogue)
         {
-            await EndSessionInternal(guildId);
+            await EndSessionDiscord(guildId);
         }
 
         private async Task UserAgent_ClientCallFailed(ulong guildId, ISIPClientUserAgent uac, string errorMessage, SIPResponse sipResponse)
         {
-            await EndSessionInternal(guildId);
+            await EndSessionDiscord(guildId);
         }
 
-        public Task EndSession(ulong guildId)
+        public Task EndSessionVoIp(ulong guildId)
         {
             if (_sessions.TryGetValue(guildId, out var session))
             {
@@ -142,7 +144,7 @@ namespace WarpVoice.Services
             return Task.CompletedTask;
         }
 
-        private async Task EndSessionInternal(ulong guildId)
+        public async Task EndSessionDiscord(ulong guildId)
         {
             if (_sessions.TryGetValue(guildId, out var session))
             {
