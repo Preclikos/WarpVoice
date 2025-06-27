@@ -95,14 +95,14 @@ namespace WarpVoice.Services
                     var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
                     await _sipService.MakeCallAsync(rtpSession, destinationUri);
 
-                    await messageChannel.SendMessageAsync($"Call to: {result} was started");
+                    await messageChannel.SendMessageAsync($"Call to {result} was started");
                 }
                 else
                 {
                     callerNumber = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
                         _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
                         string.Join(" ", number.ToCharArray());
-                    await messageChannel.SendMessageAsync($"Receiving: {result}");
+                    await messageChannel.SendMessageAsync($"Receiving call from {result}");
                 }
 
                 var users = await FlattenAsyncEnumerable(((IVoiceChannel)voiceChannel).GetUsersAsync());

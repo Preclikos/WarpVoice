@@ -49,12 +49,12 @@ namespace WarpVoice.HostedServices
                     var sessionResult = await sessionManager.StartSession(_voIPOptions.GuildId, _voIPOptions.MessageChannelId, _voIPOptions.VoiceChannelId, userAgent, uas, mediaSession, CallDirection.Incoming, callerNumber);
                     if (!sessionResult)
                     {
-                        uas.Reject(SIPResponseStatusCodesEnum.BusyHere, null, null);
+                        uas.Reject(SIPResponseStatusCodesEnum.BusyHere, "Cannot estabilish call session", null);
                     }
                 }
                 else
                 {
-                    uas.Reject(SIPResponseStatusCodesEnum.BusyHere, null, null);
+                    uas.Reject(SIPResponseStatusCodesEnum.BusyHere, "No empty lines", null);
                 }
             };
 
