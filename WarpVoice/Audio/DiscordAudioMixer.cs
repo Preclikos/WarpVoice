@@ -232,7 +232,7 @@ namespace WarpVoice.Audio
                 {
                     if (_ttsOptions.Enabled)
                     {
-                        var data = _piper.Synthesize("Receiving call from:" + number);
+                        var data = _piper.Synthesize("Receiving call from " + number);
                         await PlayAudioToDiscord(discordStream, data);
                     }
                     await userAgent.Answer(serverUserAgent, mediaSession);
