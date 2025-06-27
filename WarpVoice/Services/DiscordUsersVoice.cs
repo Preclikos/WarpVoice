@@ -1,6 +1,7 @@
 ﻿using Discord;
 using Discord.Audio;
 using WarpVoice.Audio;
+using WarpVoice.Options;
 
 namespace WarpVoice.Services
 {
@@ -30,11 +31,11 @@ namespace WarpVoice.Services
             return _mixer;
         }
 
-        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, IVoiceChannel voiceChannel, IAudioClient audioClient)
+        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, TTSOptions ttsOptions, IVoiceChannel voiceChannel, IAudioClient audioClient)
         {
             _logger = logger;
             _loggerDiscordAudioMixer = loggerDiscordAudioMixer;
-            _mixer = new DiscordAudioMixer(_loggerDiscordAudioMixer, cancellationToken.Token);
+            _mixer = new DiscordAudioMixer(_loggerDiscordAudioMixer, ttsOptions, cancellationToken.Token);
             _audioClient = audioClient;
 
             _audioClient.StreamCreated += StartUserStream;

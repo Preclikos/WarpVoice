@@ -1,4 +1,6 @@
-﻿using Discord.WebSocket;
+﻿using Discord;
+using Discord.WebSocket;
+using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
@@ -15,6 +17,7 @@ namespace WarpVoice.Services
     public class SessionManager : ISessionManager
     {
         private readonly ConcurrentDictionary<ulong, VoiceSession> _sessions = new();
+        private readonly TTSOptions _ttsOptions;
         private readonly ILogger<SessionManager> _logger;
         private readonly ILogger<DiscordUsersVoice> _loggerDiscordUsersVoice;
         private readonly ILogger<DiscordAudioMixer> _loggerDiscordAudioMixer;
@@ -24,10 +27,11 @@ namespace WarpVoice.Services
         private readonly ISipService _sipService;
 
         public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer,
-            IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions,
+            IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions, IOptions<TTSOptions> ttsOptions,
             DiscordSocketClient discord, ISipService sipService
             )
         {
+            _ttsOptions = ttsOptions.Value;
             _logger = logger;
             _loggerDiscordUsersVoice = loggerDiscordUsersVoice;
             _loggerDiscordAudioMixer = loggerDiscordAudioMixer;
@@ -42,6 +46,19 @@ namespace WarpVoice.Services
             if (_sessions.ContainsKey(guildId)) return false;
             if (_sessions.Values.Any(s => s.IsSipInUse)) return false;
             return true;
+        }
+
+        public async Task<List<IGuildUser>> FlattenAsyncEnumerable(
+    IAsyncEnumerable<IReadOnlyCollection<IGuildUser>> asyncEnumerable)
+        {
+            var result = new List<IGuildUser>();
+
+            await foreach (var group in asyncEnumerable)
+            {
+                result.AddRange(group); // Flatten each collection into the result list
+            }
+
+            return result;
         }
 
         public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, SIPServerUserAgent? serverUserAgent, RTPSession rtpSession, CallDirection direction, string number)
@@ -59,14 +76,7 @@ namespace WarpVoice.Services
                 var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
                 session.VoiceChannel = voiceChannel;
 
-                var audioClient = await voiceChannel.ConnectAsync();
-                session.AudioClient = audioClient;
-
-                var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, voiceChannel, audioClient);
-                session.DiscordVoiceManager = userVoices;
-
                 var result = number;
-
                 if (number.StartsWith("420"))
                 {
                     number = number.Substring(3);
@@ -94,6 +104,20 @@ namespace WarpVoice.Services
                         string.Join(" ", number.ToCharArray());
                     await messageChannel.SendMessageAsync($"Receiving: {result}");
                 }
+
+                var users = await FlattenAsyncEnumerable(((IVoiceChannel)voiceChannel).GetUsersAsync());
+                if (users.Count == 0 || !users.Any(a => !a.IsSelfDeafened && !a.IsBot))
+                {
+                    await messageChannel.SendMessageAsync($"There are no active users to handle call.");
+                    await EndSessionDiscord(guildId);
+                    return false;
+                }
+
+                var audioClient = await voiceChannel.ConnectAsync();
+                session.AudioClient = audioClient;
+
+                var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, _ttsOptions, voiceChannel, audioClient);
+                session.DiscordVoiceManager = userVoices;
 
                 //Single node only
                 //await _discord.SetGameAsync(result, type: ActivityType.Playing); //long time needed :( remove it or maybe other

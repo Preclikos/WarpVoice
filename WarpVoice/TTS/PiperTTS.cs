@@ -6,13 +6,13 @@ namespace WarpVoice.TTS
 {
     public class PiperTTS
     {
-        private string piperPath = "/home/preclikos/piper/piper";
-        private string modelPath = "/home/preclikos/piper/en_US-lessac-medium.onnx";
+        private readonly string piperPath = String.Empty;
+        private readonly string modelPath = String.Empty;
 
-        public PiperTTS(/*string piperExecutablePath, string modelDirectoryPath*/)
+        public PiperTTS(string piperExecutablePath, string modelDirectoryPath)
         {
-            /*piperPath = piperExecutablePath;
-            modelPath = modelDirectoryPath;*/
+            piperPath = piperExecutablePath;
+            modelPath = modelDirectoryPath;
         }
 
         /// <summary>

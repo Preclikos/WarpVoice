@@ -1,4 +1,5 @@
 ﻿using Discord.Audio;
+using Microsoft.AspNetCore.HttpsPolicy;
 using NAudio.Codecs;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -7,6 +8,7 @@ using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.IO.Pipelines;
+using WarpVoice.Options;
 using WarpVoice.TTS;
 
 namespace WarpVoice.Audio
@@ -20,15 +22,17 @@ namespace WarpVoice.Audio
         private readonly ConcurrentDictionary<ulong, TimestampAlignedSampleProvider> _userInputs = new();
 
         private readonly CancellationToken _cancellationToken;
+        private readonly TTSOptions _ttsOptions;
         private readonly PiperTTS _piper;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
         private MixingSampleProvider? _mixer;
 
-        public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, CancellationToken cancellationToken)
+        public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, TTSOptions ttsOptions, CancellationToken cancellationToken)
         {
             _logger = logger;
             _cancellationToken = cancellationToken;
-            _piper = new PiperTTS();
+            _ttsOptions = ttsOptions;
+            _piper = new PiperTTS(ttsOptions.PiperPath, ttsOptions.PiperModel);
         }
 
         public UserAudioBuffer AddUserStream(ulong userId)
@@ -275,10 +279,11 @@ namespace WarpVoice.Audio
                 //Play whatever on discord before accept
                 if (serverUserAgent != null)
                 {
-
-                    var data = _piper.Synthesize("Receiving call from:" + number);
-                    await PlayAudioToDiscord(discordStream, data);
-
+                    if (_ttsOptions.Enabled)
+                    {
+                        var data = _piper.Synthesize("Receiving call from:" + number);
+                        await PlayAudioToDiscord(discordStream, data);
+                    }
                     await userAgent.Answer(serverUserAgent, mediaSession);
                 }
 
