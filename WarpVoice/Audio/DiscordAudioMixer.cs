@@ -1,5 +1,4 @@
 ﻿using Discord.Audio;
-using Microsoft.AspNetCore.HttpsPolicy;
 using NAudio.Codecs;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
@@ -7,7 +6,7 @@ using SIPSorcery.Net;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using System.IO.Pipelines;
+using WarpVoice.Converters;
 using WarpVoice.Options;
 using WarpVoice.TTS;
 
@@ -57,31 +56,6 @@ namespace WarpVoice.Audio
             }
         }
 
-        public static float[] ConvertPcm16ToFloat(byte[] pcm16Bytes)
-        {
-            if (pcm16Bytes == null)
-                throw new ArgumentNullException(nameof(pcm16Bytes));
-
-            if (pcm16Bytes.Length % 4 != 0)
-                throw new ArgumentException("Expected 16-bit stereo PCM data (bytes must be a multiple of 4).");
-
-            int totalSamples = pcm16Bytes.Length / 2; // 2 bytes per sample
-            float[] floatSamples = new float[totalSamples];
-
-            for (int i = 0; i < totalSamples; i++)
-            {
-                int byteIndex = i * 2;
-
-                // Read little-endian 16-bit sample
-                short sample = (short)(pcm16Bytes[byteIndex] | (pcm16Bytes[byteIndex + 1] << 8));
-
-                // Normalize to float [-1.0f, ~0.99997f]
-                floatSamples[i] = sample / 32768f;
-            }
-
-            return floatSamples;
-        }
-
         public void FeedUserFrameAsync(ulong userId, byte[] opusPayload, long rtpTimestamp)
         {
             if (_mixer != null)
@@ -98,7 +72,7 @@ namespace WarpVoice.Audio
                     userBaseRtpTimestamp = rtpTimestamp;
                 }
 
-                var floatSamples = ConvertPcm16ToFloat(opusPayload);
+                var floatSamples = WaveConverter.ConvertPcm16ToFloat(opusPayload);
 
                 buffer?.AddFrame(new TimestampedFrame
                 {
@@ -106,27 +80,6 @@ namespace WarpVoice.Audio
                     Samples = floatSamples
                 });
             }
-        }
-
-        public static byte[] ConvertFloat32ToInt16LE(float[] floatBuffer)
-        {
-            // Allocate byte array: 2 bytes per sample
-            byte[] int16Buffer = new byte[floatBuffer.Length * 2];
-
-            for (int i = 0; i < floatBuffer.Length; i++)
-            {
-                // Clamp float to [-1.0f, 1.0f]
-                float sample = Math.Clamp(floatBuffer[i], -1.0f, 1.0f);
-
-                // Convert to 16-bit signed int
-                short intSample = (short)(sample * short.MaxValue);
-
-                // Write to byte array in little endian order
-                int16Buffer[i * 2] = (byte)(intSample & 0xFF);          // Low byte
-                int16Buffer[i * 2 + 1] = (byte)((intSample >> 8) & 0xFF); // High byte
-            }
-
-            return int16Buffer;
         }
 
         public static byte[] ConvertFloatToMuLawChunk(float[] floatSamples)
@@ -145,11 +98,12 @@ namespace WarpVoice.Audio
 
             return muLawBytes;
         }
-        const int targetMs = 20;
+
         public async Task DiscordToVoIp(IAudioClient audioClient, RTPSession mediaSession)
         {
             _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
 
+            var targetMs = 20;
             var buffer = new float[960 * 2]; // 20ms stereo float at 48kHz
             DateTime startTime = DateTime.UtcNow;
             Stopwatch stopwatch = Stopwatch.StartNew();
@@ -160,7 +114,7 @@ namespace WarpVoice.Audio
                 var iterationStartTime = stopwatch.ElapsedMilliseconds;
 
                 int read = _mixer.Read(buffer, 0, buffer.Length);
-                var ulawBytes = FloatToMuLawSimpleConverter.ConvertFloatToMuLawWithDuration(buffer, 48000, 2);
+                var ulawBytes = MuLawConverter.ConvertFloatToMuLawWithDuration(buffer, 48000, 2);
 
                 try
                 {
@@ -180,15 +134,12 @@ namespace WarpVoice.Audio
 
                 iteration++;
 
-                // Target time for next frame in ms
-                long targetNextFrameTime = iteration * targetMs;
-
-                // Time to sleep (how much until the next frame should be sent)
-                long delay = targetNextFrameTime - stopwatch.ElapsedMilliseconds;
+                var targetNextFrameTime = iteration * targetMs;
+                var delay = targetNextFrameTime - (int)stopwatch.ElapsedMilliseconds;
 
                 if (delay > 0)
                 {
-                    await Task.Delay((int)delay, _cancellationToken);
+                    await Task.Delay(delay, _cancellationToken);
                 }
                 else
                 {
@@ -230,7 +181,7 @@ namespace WarpVoice.Audio
 
             mediaSession.OnAudioFrameReceived += (frame) =>
             {
-                var decodedPcmBytes = DecodeMuLaw(frame.EncodedAudio);
+                var decodedPcmBytes = MuLawConverter.DecodeMuLaw(frame.EncodedAudio);
                 bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);
             };
 
@@ -249,7 +200,7 @@ namespace WarpVoice.Audio
 
                 for (int i = 0; i < discordFrameSizeSamples; i++)
                 {
-                    short sample = FloatToPcm16(floatBuffer[i]);
+                    short sample = WaveConverter.FloatToPcm16(floatBuffer[i]);
                     int byteIndex = i * 4;
                     discordBuffer[byteIndex] = (byte)(sample & 0xFF);
                     discordBuffer[byteIndex + 1] = (byte)(sample >> 8);
@@ -289,36 +240,6 @@ namespace WarpVoice.Audio
 
                 await BridgeVoIpToDiscord(discordStream, mediaSession);
             }
-        }
-
-        private byte[] DecodeMuLaw(byte[] muLawBytes)
-        {
-            short[] pcmSamples = new short[muLawBytes.Length];
-            for (int i = 0; i < muLawBytes.Length; i++)
-            {
-                pcmSamples[i] = MuLawDecoder.MuLawToLinearSample(muLawBytes[i]);
-            }
-            byte[] pcmBytes = new byte[pcmSamples.Length * 2];
-            Buffer.BlockCopy(pcmSamples, 0, pcmBytes, 0, pcmBytes.Length);
-            return pcmBytes;
-        }
-
-        private byte[] DecodeALaw(byte[] aLawBytes)
-        {
-            short[] pcmSamples = new short[aLawBytes.Length];
-            for (int i = 0; i < aLawBytes.Length; i++)
-            {
-                pcmSamples[i] = ALawDecoder.ALawToLinearSample(aLawBytes[i]);
-            }
-            byte[] pcmBytes = new byte[pcmSamples.Length * 2];
-            Buffer.BlockCopy(pcmSamples, 0, pcmBytes, 0, pcmBytes.Length);
-            return pcmBytes;
-        }
-
-        private short FloatToPcm16(float sample)
-        {
-            sample = Math.Clamp(sample, -1f, 1f);
-            return (short)(sample * short.MaxValue);
         }
     }
 }

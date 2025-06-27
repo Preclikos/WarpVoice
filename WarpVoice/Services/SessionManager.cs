@@ -1,6 +1,5 @@
 ﻿using Discord;
 using Discord.WebSocket;
-using Microsoft.AspNetCore.HttpsPolicy;
 using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
