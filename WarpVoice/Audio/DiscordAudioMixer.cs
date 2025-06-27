@@ -104,13 +104,13 @@ namespace WarpVoice.Audio
 
                 if (read > 0)
                 {
-                    var ulawBytes = MuLawConverter.ConvertFloatToMuLawWithDuration(buffer, sampleRate, channels);
+                    var alawBytes = ALawConverter.ConvertFloatToALawWithDuration(buffer, sampleRate, channels);
 
                     try
                     {
                         if (mediaSession.IsAudioStarted && !mediaSession.IsClosed)
                         {
-                            mediaSession.SendAudio((uint)ulawBytes.rtpDuration, ulawBytes.ulawBytes);
+                            mediaSession.SendAudio((uint)alawBytes.rtpDuration, alawBytes.alawBytes);
                         }
                     }
                     catch (Exception ex)
@@ -170,7 +170,7 @@ namespace WarpVoice.Audio
 
             mediaSession.OnAudioFrameReceived += (frame) =>
             {
-                var decodedPcmBytes = MuLawConverter.DecodeMuLaw(frame.EncodedAudio);
+                var decodedPcmBytes = ALawConverter.DecodeALaw(frame.EncodedAudio);
                 bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);
             };
 

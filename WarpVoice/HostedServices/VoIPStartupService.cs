@@ -39,7 +39,7 @@ namespace WarpVoice.HostedServices
             userAgent.OnIncomingCall += async (ua, req) =>
             {
                 var mediaSession = new RTPSession(false, false, false);
-                mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
+                mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMA));
 
                 var uas = userAgent.AcceptCall(req);
 

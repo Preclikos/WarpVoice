@@ -65,7 +65,7 @@ namespace WarpVoice.Modules
             int rtpPort = _voIpOptions.RtpPort;
 
             var mediaSession = new RTPSession(false, false, false, localIp, rtpPort);
-            mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
+            mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMA));
 
             var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), null, mediaSession, CallDirection.Outgoing, number);
 
@@ -102,7 +102,7 @@ namespace WarpVoice.Modules
             int rtpPort = _voIpOptions.RtpPort;
 
             var mediaSession = new RTPSession(false, false, false, localIp, rtpPort);
-            mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMU));
+            mediaSession.addTrack(new MediaStreamTrack(SDPWellKnownMediaFormatsEnum.PCMA));
 
             var result = await _sessionManager.StartSession(Context.Guild.Id, Context.Channel.Id, _voiceChannel.Id, _sipService.GetUserAgent(), null, mediaSession, CallDirection.Outgoing, name);
 
