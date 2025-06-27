@@ -69,20 +69,19 @@ namespace WarpVoice.Services
                 session.DiscordVoiceManager = userVoices;
 
                 var result = number;
-                if (number.Length > 8)
+
+                if (number.StartsWith("420"))
                 {
-                    if (number.StartsWith("420"))
-                    {
-                        number = number.Substring(3);
-                    }
-
-                    string pattern = @"(\d{3})$";
-                    string replacement = "XXX";
-
-                    result = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
-                        _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
-                        Regex.Replace(number, pattern, replacement);
+                    number = number.Substring(3);
                 }
+
+                string pattern = @"(\d{3})$";
+                string replacement = "XXX";
+
+                result = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
+                    _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
+                   number.Length > 8 ? Regex.Replace(number, pattern, replacement) : number;
+
 
                 if (direction == CallDirection.Outgoing)
                 {
