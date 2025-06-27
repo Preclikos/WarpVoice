@@ -23,6 +23,7 @@ namespace WarpVoice
             services.Configure<DiscordOptions>(Configuration.GetSection(DiscordOptions.Discord));
             services.Configure<VoIPOptions>(Configuration.GetSection(VoIPOptions.VoIP));
             services.Configure<AddressBookOptions>(Configuration.GetSection(AddressBookOptions.AddressBook));
+            services.Configure<TTSOptions>(Configuration.GetSection(AddressBookOptions.AddressBook));
 
             services.AddControllers()
                 .AddNewtonsoftJson(options =>

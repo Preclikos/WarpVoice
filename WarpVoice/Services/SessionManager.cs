@@ -9,6 +9,7 @@ using WarpVoice.Audio;
 using WarpVoice.Enums;
 using WarpVoice.Models;
 using WarpVoice.Options;
+using WarpVoice.TTS;
 
 namespace WarpVoice.Services
 {
@@ -22,6 +23,7 @@ namespace WarpVoice.Services
         private readonly AddressBookOptions _addressBookOptions;
         private readonly DiscordSocketClient _discord;
         private readonly ISipService _sipService;
+        private readonly PiperTTS _piperTTS;
 
         public SessionManager(ILogger<SessionManager> logger, ILogger<DiscordUsersVoice> loggerDiscordUsersVoice, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer,
             IOptions<VoIPOptions> voIpOptions, IOptions<AddressBookOptions> addressBookOptions,
@@ -35,6 +37,7 @@ namespace WarpVoice.Services
             _addressBookOptions = addressBookOptions.Value;
             _discord = discord;
             _sipService = sipService;
+            _piperTTS = new PiperTTS();
         }
 
         public bool CanStartSession(ulong guildId)
@@ -79,7 +82,7 @@ namespace WarpVoice.Services
                     _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
                    number.Length > 8 ? Regex.Replace(number, pattern, replacement) : number;
 
-
+                byte[]? callerNumber = null;
                 if (direction == CallDirection.Outgoing)
                 {
                     var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
@@ -89,7 +92,8 @@ namespace WarpVoice.Services
                 }
                 else
                 {
-                    await messageChannel.SendMessageAsync($"Receiving call from: {result}");
+                    callerNumber = _piperTTS.Synthesize("Receiving call from " + string.Join(" ", number.ToCharArray()));
+                    await messageChannel.SendMessageAsync($"Receiving: {result}");
                 }
 
                 //Single node only
@@ -105,8 +109,8 @@ namespace WarpVoice.Services
 
                 _logger.LogInformation($"{guildId} - Session configured");
 
-                _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
                 _ = Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
+                _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession, callerNumber); });
 
                 _logger.LogInformation($"{guildId} - Session audio started");
                 return true;

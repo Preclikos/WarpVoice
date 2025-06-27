@@ -5,6 +5,7 @@ using NAudio.Wave.SampleProviders;
 using SIPSorcery.Net;
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Threading;
 
 namespace WarpVoice.Audio
 {
@@ -16,14 +17,15 @@ namespace WarpVoice.Audio
         private readonly ConcurrentDictionary<ulong, TimestampAlignedSampleProvider> _userInputs = new();
         private readonly ILogger<DiscordAudioMixer> _logger;
         private readonly CancellationToken _cancellationToken;
-        private readonly MixingSampleProvider _mixer;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
+        private bool _mixerStarted;
+        private MixingSampleProvider _mixer;
 
         public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, CancellationToken cancellationToken)
         {
             _logger = logger;
             _cancellationToken = cancellationToken;
-            _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
+            _mixerStarted = false;
         }
 
         public UserAudioBuffer AddUserStream(ulong userId)
@@ -74,25 +76,28 @@ namespace WarpVoice.Audio
 
         public void FeedUserFrameAsync(ulong userId, byte[] opusPayload, long rtpTimestamp)
         {
-            if (!_userBuffers.TryGetValue(userId, out var buffer))
+            if (_mixerStarted)
             {
-                AddUserStream(userId);
-                _userBuffers.TryGetValue(userId, out buffer);
+                if (!_userBuffers.TryGetValue(userId, out var buffer))
+                {
+                    AddUserStream(userId);
+                    _userBuffers.TryGetValue(userId, out buffer);
+                }
+
+                if (!_startTimeStamp.TryGetValue(userId, out var userBaseRtpTimestamp))
+                {
+                    _startTimeStamp.TryAdd(userId, rtpTimestamp);
+                    userBaseRtpTimestamp = rtpTimestamp;
+                }
+
+                var floatSamples = ConvertPcm16ToFloat(opusPayload);
+
+                buffer?.AddFrame(new TimestampedFrame
+                {
+                    SampleTimestamp = (rtpTimestamp - userBaseRtpTimestamp) + 960,
+                    Samples = floatSamples
+                });
             }
-
-            if (!_startTimeStamp.TryGetValue(userId, out var userBaseRtpTimestamp))
-            {
-                _startTimeStamp.TryAdd(userId, rtpTimestamp);
-                userBaseRtpTimestamp = rtpTimestamp;
-            }
-
-            var floatSamples = ConvertPcm16ToFloat(opusPayload);
-
-            buffer?.AddFrame(new TimestampedFrame
-            {
-                SampleTimestamp = (rtpTimestamp - userBaseRtpTimestamp) + 960,
-                Samples = floatSamples
-            });
         }
 
         public static byte[] ConvertFloat32ToInt16LE(float[] floatBuffer)
@@ -135,6 +140,9 @@ namespace WarpVoice.Audio
         const int targetMs = 20;
         public async Task StartMixingLoopAsync(IAudioClient audioClient, RTPSession mediaSession)
         {
+            _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
+            _mixerStarted = true;
+
             var buffer = new float[960 * 2]; // 20ms stereo float at 48kHz
             DateTime startTime = DateTime.UtcNow;
             Stopwatch stopwatch = Stopwatch.StartNew();
@@ -182,8 +190,25 @@ namespace WarpVoice.Audio
             }
         }
 
-        public async Task ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession)
+        public async Task ReceiveSendToDiscord(IAudioClient audioClient, RTPSession mediaSession, byte[]? initMessage = null)
         {
+            using var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20);
+            if (initMessage != null)
+            {
+                using var ms = new MemoryStream(initMessage);
+                using (var reader = new WaveFileReader(ms))
+                {
+                    byte[] buffer = new byte[3840]; // 20ms of 48kHz 16-bit stereo PCM
+                    int bytesRead;
+
+                    while ((bytesRead = reader.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        await discordStream.WriteAsync(buffer, 0, bytesRead, _cancellationToken);
+                        await Task.Delay(20);
+                    }
+                }
+            }
+
             int discordFrameSizeSamples = 960;
 
             // Setup formats
@@ -205,13 +230,10 @@ namespace WarpVoice.Audio
             {
                 var decodedPcmBytes = DecodeMuLaw(frame.EncodedAudio);
                 bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);
-
             };
 
             float[] floatBuffer = new float[discordFrameSizeSamples];
             int samplesRead = 0;
-
-            using var discordStream = audioClient.CreatePCMStream(AudioApplication.Voice, bufferMillis: 20);
 
             while (!_cancellationToken.IsCancellationRequested)
             {
