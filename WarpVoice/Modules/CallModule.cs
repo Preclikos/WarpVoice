@@ -1,13 +1,12 @@
-﻿using WarpVoice.Services;
-using Discord;
+﻿using Discord;
 using Discord.Interactions;
-using SIPSorceryMedia.Abstractions;
-using SIPSorcery.Net;
-using WarpVoice.Options;
-using System.Net;
 using Microsoft.Extensions.Options;
+using SIPSorcery.Net;
+using SIPSorceryMedia.Abstractions;
+using System.Net;
 using WarpVoice.Enums;
-using static System.Runtime.InteropServices.JavaScript.JSType;
+using WarpVoice.Options;
+using WarpVoice.Services;
 namespace WarpVoice.Modules
 {
     [RequireContext(ContextType.Guild)]

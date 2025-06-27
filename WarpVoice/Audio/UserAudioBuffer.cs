@@ -1,6 +1,4 @@
-﻿using Discord.Audio;
-
-namespace WarpVoice.Audio
+﻿namespace WarpVoice.Audio
 {
     public class UserAudioBuffer
     {

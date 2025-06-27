@@ -1,7 +1,7 @@
-﻿using WarpVoice.Models;
-using SIPSorcery.Net;
+﻿using SIPSorcery.Net;
 using SIPSorcery.SIP.App;
 using WarpVoice.Enums;
+using WarpVoice.Models;
 
 namespace WarpVoice.Services
 {

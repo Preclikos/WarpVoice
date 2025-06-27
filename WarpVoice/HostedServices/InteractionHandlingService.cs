@@ -1,6 +1,6 @@
-﻿using Discord.Interactions;
+﻿using Discord;
+using Discord.Interactions;
 using Discord.WebSocket;
-using Discord;
 using System.Reflection;
 
 namespace WarpVoice.HostedServices
@@ -38,7 +38,8 @@ namespace WarpVoice.HostedServices
             //await _commands.AddModulesAsync(Assembly.GetEntryAssembly(), _services);
             _discord.InteractionCreated += OnInteractionAsync;
             //_discord.MessageReceived += OnCommandAsync;
-            _discord.Ready += async () => {
+            _discord.Ready += async () =>
+            {
                 await _interactions.RegisterCommandsGloballyAsync();
                 //await _interactions.RegisterCommandsToGuildAsync(900693605612654622);
                 await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening);

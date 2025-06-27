@@ -1,7 +1,7 @@
-﻿using WarpVoice.Options;
-using Discord;
+﻿using Discord;
 using Discord.WebSocket;
 using Microsoft.Extensions.Options;
+using WarpVoice.Options;
 
 namespace WarpVoice.HostedServices
 {

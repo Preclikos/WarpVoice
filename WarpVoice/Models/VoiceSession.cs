@@ -4,7 +4,6 @@ using Discord.WebSocket;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
-using System.Diagnostics.CodeAnalysis;
 using WarpVoice.Services;
 
 namespace WarpVoice.Models

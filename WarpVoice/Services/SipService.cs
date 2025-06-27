@@ -1,8 +1,8 @@
-﻿using SIPSorcery.SIP;
-using SIPSorcery.SIP.App;
+﻿using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
+using SIPSorcery.SIP;
+using SIPSorcery.SIP.App;
 using WarpVoice.Options;
-using Microsoft.Extensions.Options;
 
 namespace WarpVoice.Services
 {

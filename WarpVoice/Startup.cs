@@ -1,12 +1,12 @@
-﻿using WarpVoice.HostedServices;
-using WarpVoice.Options;
-using WarpVoice.Services;
-using Discord;
+﻿using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
 using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using WarpVoice.HostedServices;
+using WarpVoice.Options;
+using WarpVoice.Services;
 
 namespace WarpVoice
 {

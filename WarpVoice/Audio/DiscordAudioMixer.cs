@@ -1,10 +1,10 @@
-﻿using NAudio.Wave.SampleProviders;
+﻿using Discord.Audio;
+using NAudio.Codecs;
 using NAudio.Wave;
+using NAudio.Wave.SampleProviders;
+using SIPSorcery.Net;
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Discord.Audio;
-using SIPSorcery.Net;
-using NAudio.Codecs;
 
 namespace WarpVoice.Audio
 {

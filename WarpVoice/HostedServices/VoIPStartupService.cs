@@ -1,15 +1,11 @@
-﻿using WarpVoice.Options;
-using Discord;
-using Discord.WebSocket;
-using Microsoft.Extensions.Options;
-using SIPSorcery.SIP.App;
-using SIPSorcery.SIP;
+﻿using Microsoft.Extensions.Options;
 using SIPSorcery.Net;
-using WarpVoice.Services;
-using System.Net;
-using System;
+using SIPSorcery.SIP;
+using SIPSorcery.SIP.App;
 using SIPSorceryMedia.Abstractions;
 using WarpVoice.Enums;
+using WarpVoice.Options;
+using WarpVoice.Services;
 
 namespace WarpVoice.HostedServices
 {
