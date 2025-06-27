@@ -33,7 +33,7 @@ namespace WarpVoice.Modules
             var session = _sessionManager.GetSession(Context.Guild.Id);
             if (session != null)
             {
-                await _sessionManager.EndSession(Context.Guild.Id);
+                await _sessionManager.EndSessionVoIp(Context.Guild.Id);
                 await FollowupAsync("Call is HangedUp");
             }
             else
