@@ -4,27 +4,28 @@ using Discord.WebSocket;
 using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
+using System.Diagnostics.CodeAnalysis;
 using WarpVoice.Services;
 
 namespace WarpVoice.Models
 {
-    public class VoiceSession
+    public class VoiceSession(ulong guildId, SIPUserAgent sIPUserAgent, RTPSession mediaSession)
     {
-        public ulong GuildId { get; set; }
 
-        public ISocketMessageChannel MessageChannel { get; set; }
-        public IVoiceChannel VoiceChannel { get; set; }
-        public IAudioClient AudioClient { get; set; }
+        public ulong GuildId { get; } = guildId;
 
-        public DiscordUsersVoice DiscordVoiceManager { get; set; }
+        public ISocketMessageChannel? MessageChannel { get; set; }
+        public IVoiceChannel? VoiceChannel { get; set; }
+        public IAudioClient? AudioClient { get; set; }
 
-        public SIPUserAgent SIPUserAgent { get; set; }
-        public (SIPCallFailedDelegate callFailedHandler, Action<SIPDialogue> hungupHandler) SIPAgentEvents { get;set; }
+        public DiscordUsersVoice? DiscordVoiceManager { get; set; }
 
-        public RTPSession MediaSession { get; set; }
+        public SIPUserAgent SIPUserAgent { get; } = sIPUserAgent;
+        public (SIPCallFailedDelegate callFailedHandler, Action<SIPDialogue> hungupHandler) SIPAgentEvents { get; set; }
+        public RTPSession MediaSession { get; } = mediaSession;
 
 
-        public bool IsSipInUse { get; set; }
-        public DateTime StartedAt { get; set; }
+        public bool IsSipInUse { get; private set; } = true;
+        public DateTime StartedAt { get; private set; } = DateTime.UtcNow;
     }
 }

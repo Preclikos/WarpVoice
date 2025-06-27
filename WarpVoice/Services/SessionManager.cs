@@ -5,6 +5,7 @@ using SIPSorcery.Net;
 using SIPSorcery.SIP;
 using SIPSorcery.SIP.App;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 using WarpVoice.Audio;
@@ -49,74 +50,70 @@ namespace WarpVoice.Services
         public async Task<bool> StartSession(ulong guildId, ulong messageChannelId, ulong voiceChannelId, SIPUserAgent userAgent, RTPSession rtpSession, CallDirection direction, string number)
         {
             if (!CanStartSession(guildId)) return false;
-
-            var guild = _discord.GetGuild(guildId);
-
-            var messageChannel = guild.GetTextChannel(messageChannelId);
-            var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
-
-            var audioClient = await voiceChannel.ConnectAsync();
-            var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, voiceChannel, audioClient);
-
-            var result = number;
-            if (number.Length > 8)
-            {
-                if (number.StartsWith("420"))
-                {
-                    number = number.Substring(3);
-                }
-
-                string pattern = @"(\d{3})$";
-                string replacement = "XXX";
-
-                result = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
-                    _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
-                    Regex.Replace(number, pattern, replacement);
-            }
-
-            if (direction == CallDirection.Outgoing)
-            {
-                var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
-                await _sipService.MakeCallAsync(rtpSession, destinationUri);
-
-                await messageChannel.SendMessageAsync($"Call to: {result} was started");
-            }
-            else
-            {
-                await messageChannel.SendMessageAsync($"Receiving call from: {result}");
-            }
-
-            //Single node only
-            //await _discord.SetGameAsync(result, type: ActivityType.Playing); //long time needed :( remove it or maybe other
-
-            SIPCallFailedDelegate callFailedHandler = async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
-            Action<SIPDialogue> hungupHandler = async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
-
-            userAgent.ClientCallFailed += callFailedHandler;
-            userAgent.OnCallHungup += hungupHandler;
-
-            var session = new VoiceSession
-            {
-                GuildId = guildId,
-                MessageChannel = messageChannel,
-                VoiceChannel = voiceChannel,
-                AudioClient = audioClient,
-                DiscordVoiceManager = userVoices,
-                SIPUserAgent = userAgent,
-                SIPAgentEvents = (callFailedHandler, hungupHandler),
-                MediaSession = rtpSession,
-                IsSipInUse = true,
-                StartedAt = DateTime.UtcNow
-            };
-
+            var session = new VoiceSession(guildId, userAgent, rtpSession);
             if (_sessions.TryAdd(guildId, session))
             {
-                _logger.LogInformation("Session added");
+                _logger.LogInformation($"{guildId} - Session added");
+                var guild = _discord.GetGuild(guildId);
+
+                var messageChannel = guild.GetTextChannel(messageChannelId);
+                session.MessageChannel = messageChannel;
+
+                var voiceChannel = guild.GetVoiceChannel(voiceChannelId);
+                session.VoiceChannel = voiceChannel;
+
+                var audioClient = await voiceChannel.ConnectAsync();
+                session.AudioClient = audioClient;
+
+                var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, voiceChannel, audioClient);
+                session.DiscordVoiceManager = userVoices;
+
+                var result = number;
+                if (number.Length > 8)
+                {
+                    if (number.StartsWith("420"))
+                    {
+                        number = number.Substring(3);
+                    }
+
+                    string pattern = @"(\d{3})$";
+                    string replacement = "XXX";
+
+                    result = _addressBookOptions.NameNumbers.Any(a => a.Value == number) ?
+                        _addressBookOptions.NameNumbers.SingleOrDefault(a => a.Value == number).Key :
+                        Regex.Replace(number, pattern, replacement);
+                }
+
+                if (direction == CallDirection.Outgoing)
+                {
+                    var destinationUri = $"sip:{number}@{_voIpOptions.Domain}";
+                    await _sipService.MakeCallAsync(rtpSession, destinationUri);
+
+                    await messageChannel.SendMessageAsync($"Call to: {result} was started");
+                }
+                else
+                {
+                    await messageChannel.SendMessageAsync($"Receiving call from: {result}");
+                }
+
+                //Single node only
+                //await _discord.SetGameAsync(result, type: ActivityType.Playing); //long time needed :( remove it or maybe other
+
+                SIPCallFailedDelegate callFailedHandler = async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
+                Action<SIPDialogue> hungupHandler = async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
+
+                userAgent.ClientCallFailed += callFailedHandler;
+                userAgent.OnCallHungup += hungupHandler;
+
+                _logger.LogInformation($"{guildId} - Session configured");
+
                 _ = Task.Run(async () => { await userVoices.GetMixer().ReceiveSendToDiscord(audioClient, rtpSession); });
                 _ = Task.Run(async () => { await userVoices.GetMixer().StartMixingLoopAsync(audioClient, rtpSession); });
-                return true;
-            }
 
+                _logger.LogInformation($"{guildId} - Session audio started");
+                return true;
+
+            }
             return false;
         }
 
@@ -150,15 +147,24 @@ namespace WarpVoice.Services
         {
             if (_sessions.TryGetValue(guildId, out var session))
             {
-                await session.DiscordVoiceManager.Stop();
-                await session.VoiceChannel.DisconnectAsync();
+                if (session.DiscordVoiceManager != null)
+                {
+                    await session.DiscordVoiceManager.Stop();
+                }
+                if (session.VoiceChannel != null)
+                {
+                    await session.VoiceChannel.DisconnectAsync();
+                }
 
                 session.SIPUserAgent.ClientCallFailed -= session.SIPAgentEvents.callFailedHandler;
                 session.SIPUserAgent.OnCallHungup -= session.SIPAgentEvents.hungupHandler;
 
                 //Single node only
                 //await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening); //long time needed :( remove it or maybe other
-                await session.MessageChannel.SendMessageAsync("Hanged up");
+                if (session.MessageChannel != null)
+                {
+                    await session.MessageChannel.SendMessageAsync("Hanged up");
+                }
 
                 if (!_sessions.Remove(guildId, out var _))
                 {
