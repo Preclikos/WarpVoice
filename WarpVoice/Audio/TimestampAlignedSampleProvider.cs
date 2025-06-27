@@ -9,7 +9,6 @@ namespace WarpVoice.Audio
         private long _currentTimestamp = 0;
         private readonly int _frameSize = 960 * waveFormat.Channels;
 
-
         public int Read(float[] buffer, int offset, int count)
         {
             int samplesRead = 0;

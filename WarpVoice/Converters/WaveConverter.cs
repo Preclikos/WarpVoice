@@ -1,34 +1,25 @@
-﻿using NAudio.Wave.SampleProviders;
-using NAudio.Wave;
-
-namespace WarpVoice.Converters
+﻿namespace WarpVoice.Converters
 {
     public static class WaveConverter
     {
         /// <summary>
         /// Converts 16-bit stereo PCM audio bytes to an array of normalized float samples.
         /// </summary>
-        /// <param name="pcm16Bytes">Byte array of interleaved 16-bit PCM samples (stereo).</param>
-        /// <returns>Array of float samples in the range [-1.0, 1.0].</returns>
         public static float[] ConvertPcm16ToFloat(byte[] pcm16Bytes)
         {
-            if (pcm16Bytes == null)
+            if (pcm16Bytes is null)
                 throw new ArgumentNullException(nameof(pcm16Bytes));
 
-            if (pcm16Bytes.Length % 4 != 0)
-                throw new ArgumentException("Expected 16-bit stereo PCM data (bytes must be a multiple of 4).");
+            if (pcm16Bytes.Length % 2 != 0)
+                throw new ArgumentException("Invalid PCM data. Expected even byte length.");
 
-            int totalSamples = pcm16Bytes.Length / 2;
-            float[] floatSamples = new float[totalSamples];
+            int sampleCount = pcm16Bytes.Length / 2;
+            float[] floatSamples = new float[sampleCount];
 
-            for (int i = 0; i < totalSamples; i++)
+            for (int i = 0; i < sampleCount; i++)
             {
-                int byteIndex = i * 2;
-
-                // Combine two bytes into a 16-bit signed sample (little-endian)
-                short sample = (short)(pcm16Bytes[byteIndex] | (pcm16Bytes[byteIndex + 1] << 8));
-
-                // Normalize to range [-1.0, 1.0]
+                int index = i * 2;
+                short sample = (short)(pcm16Bytes[index] | (pcm16Bytes[index + 1] << 8));
                 floatSamples[i] = sample / 32768f;
             }
 
@@ -36,75 +27,56 @@ namespace WarpVoice.Converters
         }
 
         /// <summary>
-        /// Converts a float sample (range [-1.0, 1.0]) to a 16-bit PCM value.
+        /// Converts a float sample [-1.0, 1.0] to a 16-bit PCM value.
         /// </summary>
-        /// <param name="sample">Float sample to convert.</param>
-        /// <returns>PCM-encoded 16-bit sample.</returns>
         public static short FloatToPcm16(float sample)
         {
-            // Clamp to valid audio range
             sample = Math.Clamp(sample, -1f, 1f);
-
-            // Scale and convert to short
             return (short)(sample * short.MaxValue);
         }
 
         /// <summary>
-        /// Resamples an audio buffer using NAudio's WdlResamplingSampleProvider.
+        /// Resamples a float buffer from one sample rate to another using linear interpolation.
         /// </summary>
-        /// <param name="input">Float array of mono audio samples.</param>
-        /// <param name="inputRate">Input sample rate (Hz).</param>
-        /// <param name="outputRate">Output sample rate (Hz).</param>
-        /// <returns>Resampled float array.</returns>
         public static float[] Resample(float[] input, int inputRate, int outputRate)
         {
-            if (input == null || input.Length == 0)
+            if (input == null || input.Length == 0 || inputRate <= 0 || outputRate <= 0)
                 return Array.Empty<float>();
 
-            // Convert float array to byte array (IEEE 32-bit float)
-            byte[] inputBytes = new byte[input.Length * sizeof(float)];
-            Buffer.BlockCopy(input, 0, inputBytes, 0, inputBytes.Length);
-
-            // Create a buffered provider to stream audio samples
-            var sourceProvider = new BufferedWaveProvider(WaveFormat.CreateIeeeFloatWaveFormat(inputRate, 1));
-            sourceProvider.AddSamples(inputBytes, 0, inputBytes.Length);
-
-            // Convert to ISampleProvider for resampling
-            var sampleProvider = sourceProvider.ToSampleProvider();
-
-            // Initialize resampler
-            var resampler = new WdlResamplingSampleProvider(sampleProvider, outputRate);
-
-            // Estimate the length of the output buffer
             int outputLength = (int)((long)input.Length * outputRate / inputRate);
             float[] output = new float[outputLength];
 
-            // Read resampled data
-            int samplesRead = resampler.Read(output, 0, outputLength);
+            double ratio = (double)input.Length / outputLength;
 
-            // Trim the array if fewer samples were produced
-            if (samplesRead < outputLength)
+            for (int i = 0; i < outputLength; i++)
             {
-                Array.Resize(ref output, samplesRead);
+                double position = i * ratio;
+                int index = (int)position;
+                double frac = position - index;
+
+                if (index + 1 < input.Length)
+                    output[i] = (float)((1.0 - frac) * input[index] + frac * input[index + 1]);
+                else
+                    output[i] = input[^1]; // last sample fallback
             }
 
             return output;
         }
 
         /// <summary>
-        /// Downmixes stereo audio to mono by averaging each pair of left and right samples.
+        /// Downmixes interleaved stereo float samples to mono.
         /// </summary>
-        /// <param name="stereoSamples">Float array of interleaved stereo samples.</param>
-        /// <returns>Mono float array.</returns>
         public static float[] DownmixStereoToMono(float[] stereoSamples)
         {
+            if (stereoSamples == null || stereoSamples.Length % 2 != 0)
+                throw new ArgumentException("Stereo sample data must contain an even number of floats.");
+
             int monoLength = stereoSamples.Length / 2;
             float[] mono = new float[monoLength];
 
-            for (int i = 0; i < monoLength; i++)
+            for (int i = 0, j = 0; i < monoLength; i++, j += 2)
             {
-                // Average left and right samples
-                mono[i] = 0.5f * (stereoSamples[i * 2] + stereoSamples[i * 2 + 1]);
+                mono[i] = 0.5f * (stereoSamples[j] + stereoSamples[j + 1]);
             }
 
             return mono;

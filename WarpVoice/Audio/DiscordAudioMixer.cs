@@ -1,5 +1,4 @@
 ﻿using Discord.Audio;
-using NAudio.Codecs;
 using NAudio.Wave;
 using NAudio.Wave.SampleProviders;
 using SIPSorcery.Net;
@@ -82,68 +81,55 @@ namespace WarpVoice.Audio
             }
         }
 
-        public static byte[] ConvertFloatToMuLawChunk(float[] floatSamples)
-        {
-            byte[] muLawBytes = new byte[floatSamples.Length];
-
-            for (int i = 0; i < floatSamples.Length; i++)
-            {
-                // Clamp float to [-1.0, 1.0] and convert to short (16-bit PCM)
-                float clamped = Math.Clamp(floatSamples[i], -1.0f, 1.0f);
-                short pcm = (short)(clamped * short.MaxValue);
-
-                // Convert short PCM to μ-law
-                muLawBytes[i] = MuLawEncoder.LinearToMuLawSample(pcm);
-            }
-
-            return muLawBytes;
-        }
-
         public async Task DiscordToVoIp(IAudioClient audioClient, RTPSession mediaSession)
         {
             _mixer = new MixingSampleProvider(_waveFormat) { ReadFully = true };
 
-            var targetMs = 20;
-            var buffer = new float[960 * 2]; // 20ms stereo float at 48kHz
-            DateTime startTime = DateTime.UtcNow;
-            Stopwatch stopwatch = Stopwatch.StartNew();
-            int iteration = 0;
+            await Task.Delay(40, _cancellationToken); // Initial sync delay
+
+            const int sampleRate = 48000;
+            const int channels = 2;
+            const int frameDurationMs = 20;
+            const int samplesPerFrame = sampleRate * frameDurationMs / 1000; // 960 samples
+            const int floatBufferSize = samplesPerFrame * channels;
+
+            float[] buffer = new float[floatBufferSize];
+
+            var stopwatch = Stopwatch.StartNew();
+            long nextFrameTime = stopwatch.ElapsedMilliseconds;
 
             while (!_cancellationToken.IsCancellationRequested)
             {
-                var iterationStartTime = stopwatch.ElapsedMilliseconds;
+                int read = _mixer.Read(buffer, 0, floatBufferSize);
 
-                int read = _mixer.Read(buffer, 0, buffer.Length);
-                var ulawBytes = MuLawConverter.ConvertFloatToMuLawWithDuration(buffer, 48000, 2);
-
-                try
+                if (read > 0)
                 {
-                    if (mediaSession.IsAudioStarted && !mediaSession.IsClosed)
+                    var ulawBytes = MuLawConverter.ConvertFloatToMuLawWithDuration(buffer, sampleRate, channels);
+
+                    try
                     {
-                        mediaSession.SendAudio((uint)ulawBytes.rtpDuration, ulawBytes.ulawBytes);
+                        if (mediaSession.IsAudioStarted && !mediaSession.IsClosed)
+                        {
+                            mediaSession.SendAudio((uint)ulawBytes.rtpDuration, ulawBytes.ulawBytes);
+                        }
                     }
-                    else
+                    catch (Exception ex)
                     {
-                        await Task.Delay(10);
+                        _logger.LogError($"Call audio send error: {ex.Message}");
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError("Call audio send " + ex.Message);
-                }
 
-                iteration++;
-
-                var targetNextFrameTime = iteration * targetMs;
-                var delay = targetNextFrameTime - (int)stopwatch.ElapsedMilliseconds;
+                nextFrameTime += frameDurationMs;
+                long delay = nextFrameTime - stopwatch.ElapsedMilliseconds;
 
                 if (delay > 0)
                 {
-                    await Task.Delay(delay, _cancellationToken);
+                    await Task.Delay((int)delay, _cancellationToken);
                 }
                 else
                 {
-                    _logger.LogWarning($"Audio loop running behind by {-delay}ms");
+                    _logger.LogWarning($"Audio loop behind by {-delay}ms");
+                    nextFrameTime = stopwatch.ElapsedMilliseconds; // reset to avoid drift
                 }
             }
         }
@@ -165,19 +151,22 @@ namespace WarpVoice.Audio
 
         private async Task BridgeVoIpToDiscord(AudioOutStream audioStream, RTPSession mediaSession)
         {
-            int discordFrameSizeSamples = 960;
+            const int discordFrameSizeSamples = 960;
+            const int discordSampleRate = 48000;
+            const int inputSampleRate = 8000;
 
-            var waveFormat8kMono = WaveFormat.CreateCustomFormat(WaveFormatEncoding.Pcm, 8000, 1, 16000, 2, 16);
+            var waveFormat8kMono = WaveFormat.CreateCustomFormat(WaveFormatEncoding.Pcm, inputSampleRate, 1, inputSampleRate * 2, 2, 16);
 
             var bufferedWaveProvider = new BufferedWaveProvider(waveFormat8kMono)
             {
                 DiscardOnBufferOverflow = true,
-                BufferLength = waveFormat8kMono.AverageBytesPerSecond * 5 // 5 sec buffer max
+                BufferLength = waveFormat8kMono.AverageBytesPerSecond * 5
             };
 
-            var resampler = new WdlResamplingSampleProvider(bufferedWaveProvider.ToSampleProvider(), 48000);
+            var resampler = new WdlResamplingSampleProvider(bufferedWaveProvider.ToSampleProvider(), discordSampleRate);
 
-            byte[] discordBuffer = new byte[discordFrameSizeSamples * 2 * 2];
+            byte[] discordBuffer = new byte[discordFrameSizeSamples * 2 * 2]; // 16-bit stereo
+            float[] floatBuffer = new float[discordFrameSizeSamples];
 
             mediaSession.OnAudioFrameReceived += (frame) =>
             {
@@ -185,41 +174,40 @@ namespace WarpVoice.Audio
                 bufferedWaveProvider.AddSamples(decodedPcmBytes, 0, decodedPcmBytes.Length);
             };
 
-            float[] floatBuffer = new float[discordFrameSizeSamples];
-            int samplesRead = 0;
-
-            while (!_cancellationToken.IsCancellationRequested)
+            try
             {
-                samplesRead = resampler.Read(floatBuffer, 0, discordFrameSizeSamples);
-
-                if (samplesRead < discordFrameSizeSamples)
+                while (!_cancellationToken.IsCancellationRequested)
                 {
-                    // Not enough data yet for a full Discord frame - break and wait for more input
-                    await Task.Delay(20);
-                }
+                    int samplesRead = resampler.Read(floatBuffer, 0, discordFrameSizeSamples);
 
-                for (int i = 0; i < discordFrameSizeSamples; i++)
-                {
-                    short sample = WaveConverter.FloatToPcm16(floatBuffer[i]);
-                    int byteIndex = i * 4;
-                    discordBuffer[byteIndex] = (byte)(sample & 0xFF);
-                    discordBuffer[byteIndex + 1] = (byte)(sample >> 8);
-                    discordBuffer[byteIndex + 2] = (byte)(sample & 0xFF);
-                    discordBuffer[byteIndex + 3] = (byte)(sample >> 8);
-                }
+                    if (samplesRead < discordFrameSizeSamples)
+                    {
+                        await Task.Delay(5, _cancellationToken); // slightly shorter delay
+                        continue;
+                    }
 
-                try
-                {
+                    // Fill Discord buffer with stereo interleaved 16-bit PCM
+                    Span<byte> discordSpan = discordBuffer;
+                    for (int i = 0; i < discordFrameSizeSamples; i++)
+                    {
+                        short sample = WaveConverter.FloatToPcm16(floatBuffer[i]);
+
+                        // Write to both left and right (stereo)
+                        int offset = i * 4;
+                        discordSpan[offset] = discordSpan[offset + 2] = (byte)(sample & 0xFF);
+                        discordSpan[offset + 1] = discordSpan[offset + 3] = (byte)(sample >> 8);
+                    }
+
                     await audioStream.WriteAsync(discordBuffer, 0, discordBuffer.Length, _cancellationToken);
                 }
-                catch (OperationCanceledException ex)
-                {
-                    _logger.LogInformation("Discord audio send " + ex.Message);
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError("Discord audio send " + ex.Message);
-                }
+            }
+            catch (OperationCanceledException ex)
+            {
+                _logger.LogInformation("Discord audio stream canceled: " + ex.Message);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError("Error writing to Discord audio stream: " + ex.Message);
             }
         }
 
