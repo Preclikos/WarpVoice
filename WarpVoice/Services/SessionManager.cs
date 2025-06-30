@@ -123,11 +123,13 @@ namespace WarpVoice.Services
 
                 SIPCallFailedDelegate callFailedHandler = async (uac, errorMessage, sipResponse) => await UserAgent_ClientCallFailed(guildId, uac, errorMessage, sipResponse);
                 Action<SIPDialogue> hungupHandler = async (sIPDialogue) => await UserAgent_OnCallHungup(guildId, sIPDialogue);
+                Action<SDPMediaTypesEnum> sessionOnTimeout = async (mediaTypeEnum) => await RtpSession_OnTimeout(guildId, mediaTypeEnum);
 
                 userAgent.ClientCallFailed += callFailedHandler;
                 userAgent.OnCallHungup += hungupHandler;
+                rtpSession.OnTimeout += sessionOnTimeout;
 
-                session.SIPAgentEvents = (callFailedHandler, hungupHandler);
+                session.SIPAgentEvents = (callFailedHandler, hungupHandler, sessionOnTimeout);
 
                 _logger.LogInformation($"{guildId} - Session configured");
 
@@ -139,6 +141,11 @@ namespace WarpVoice.Services
 
             }
             return false;
+        }
+
+        private async Task RtpSession_OnTimeout(ulong guildId, SDPMediaTypesEnum obj)
+        {
+            await EndSessionVoIp(guildId);
         }
 
         private async Task UserAgent_OnCallHungup(ulong guildId, SIPDialogue sIPDialogue)
@@ -182,6 +189,7 @@ namespace WarpVoice.Services
 
                 session.SIPUserAgent.ClientCallFailed -= session.SIPAgentEvents.callFailedHandler;
                 session.SIPUserAgent.OnCallHungup -= session.SIPAgentEvents.hungupHandler;
+                session.MediaSession.OnTimeout -= session.SIPAgentEvents.sessionOnTimeout;
 
                 //Single node only
                 //await _discord.SetGameAsync("/call | /hangup", type: ActivityType.Listening); //long time needed :( remove it or maybe other

@@ -20,7 +20,7 @@ namespace WarpVoice.Models
         public DiscordUsersVoice? DiscordVoiceManager { get; set; }
 
         public SIPUserAgent SIPUserAgent { get; } = sIPUserAgent;
-        public (SIPCallFailedDelegate callFailedHandler, Action<SIPDialogue> hungupHandler) SIPAgentEvents { get; set; }
+        public (SIPCallFailedDelegate callFailedHandler, Action<SIPDialogue> hungupHandler, Action<SDPMediaTypesEnum> sessionOnTimeout) SIPAgentEvents { get; set; }
         public RTPSession MediaSession { get; } = mediaSession;
 
 
