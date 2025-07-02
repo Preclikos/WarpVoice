@@ -107,7 +107,8 @@ namespace WarpVoice.Services
                     }
 
                     var users = await FlattenAsyncEnumerable(((IVoiceChannel)voiceChannel).GetUsersAsync());
-                    if (users.Count(c => !c.IsBot) == 0 || !users.Any(a => !a.IsSelfDeafened && !a.IsBot))
+                    var usersInVoiceChannel = users.Where(w => w.VoiceChannel != null && w.VoiceChannel.Id == voiceChannelId && !w.IsBot);
+                    if (usersInVoiceChannel.Count() == 0 || !usersInVoiceChannel.Any(a => !a.IsSelfDeafened))
                     {
                         await messageChannel.SendMessageAsync($"There are no active users to handle call.");
                         await EndSessionDiscord(guildId);
@@ -144,6 +145,7 @@ namespace WarpVoice.Services
                 catch (Exception ex)
                 {
                     _logger.LogError(ex, "Can't start session");
+                    await EndSessionDiscord(guildId);
                     return false;
                 }
 
