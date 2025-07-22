@@ -45,11 +45,11 @@ namespace WarpVoice.Services
             return result;
         }
 
-        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, TTSOptions ttsOptions, IVoiceChannel voiceChannel, IAudioClient audioClient)
+        public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, TTSOptions ttsOptions, VoIPOptions voIPOptions, IVoiceChannel voiceChannel, IAudioClient audioClient)
         {
             _logger = logger;
             _loggerDiscordAudioMixer = loggerDiscordAudioMixer;
-            _mixer = new DiscordAudioMixer(_loggerDiscordAudioMixer, ttsOptions, cancellationToken.Token);
+            _mixer = new DiscordAudioMixer(_loggerDiscordAudioMixer, ttsOptions, voIPOptions, cancellationToken.Token);
             _audioClient = audioClient;
 
             _audioClient.StreamCreated += StartUserStream;
@@ -66,19 +66,19 @@ namespace WarpVoice.Services
                 {
                     /*foreach (var member in userBatch)
                     {*/
-                        if (!member.IsBot && !_userHandlers.ContainsKey(member.Id))
+                    if (!member.IsBot && !_userHandlers.ContainsKey(member.Id))
+                    {
+                        try
                         {
-                            try
-                            {
-                                var stream = streams.Single(s => s.Key == member.Id).Value;
-                                await StartUserStream(member.Id, stream);
-                                logger.LogInformation($"[INIT] Added user: {member.Username}");
-                            }
-                            catch
-                            {
-                                logger.LogWarning($"Could not get stream for: {member.Username}");
-                            }
+                            var stream = streams.Single(s => s.Key == member.Id).Value;
+                            await StartUserStream(member.Id, stream);
+                            logger.LogInformation($"[INIT] Added user: {member.Username}");
                         }
+                        catch
+                        {
+                            logger.LogWarning($"Could not get stream for: {member.Username}");
+                        }
+                    }
                     //}
                 }
             }).Wait();

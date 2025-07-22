@@ -21,16 +21,18 @@ namespace WarpVoice.Audio
 
         private readonly CancellationToken _cancellationToken;
         private readonly TTSOptions _ttsOptions;
+        private readonly VoIPOptions _voIPOptions;
         private readonly PiperTTS _piper;
         private readonly WaveFormat _waveFormat = WaveFormat.CreateIeeeFloatWaveFormat(48000, 2);
         private MixingSampleProvider? _mixer;
 
-        public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, TTSOptions ttsOptions, CancellationToken cancellationToken)
+        public DiscordAudioMixer(ILogger<DiscordAudioMixer> logger, TTSOptions ttsOptions, VoIPOptions voIPOptions, CancellationToken cancellationToken)
         {
             _logger = logger;
             _cancellationToken = cancellationToken;
             _ttsOptions = ttsOptions;
             _piper = new PiperTTS(ttsOptions.PiperPath, ttsOptions.PiperModel);
+            _voIPOptions = voIPOptions;
         }
 
         public UserAudioBuffer AddUserStream(ulong userId)
@@ -104,7 +106,7 @@ namespace WarpVoice.Audio
 
                 if (read > 0)
                 {
-                    var alawBytes = ALawConverter.ConvertFloatToALawWithDuration(buffer, sampleRate, channels);
+                    var alawBytes = ALawConverter.ConvertFloatToALawWithDuration(buffer, sampleRate, channels, _voIPOptions.SipGain);
 
                     try
                     {
@@ -209,7 +211,14 @@ namespace WarpVoice.Audio
                     Span<byte> discordSpan = discordBuffer;
                     for (int i = 0; i < discordFrameSizeSamples; i++)
                     {
-                        short sample = WaveConverter.FloatToPcm16(floatBuffer[i]);
+                        // Apply gain to the float sample
+                        float amplified = floatBuffer[i] * _voIPOptions.DiscordGain;
+
+                        // Clamp to avoid clipping
+                        amplified = Math.Clamp(amplified, -1.0f, 1.0f);
+
+                        // Convert to PCM 16-bit
+                        short sample = WaveConverter.FloatToPcm16(amplified);
 
                         // Write to both left and right (stereo)
                         int offset = i * 4;

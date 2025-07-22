@@ -118,7 +118,7 @@ namespace WarpVoice.Services
                     var audioClient = await voiceChannel.ConnectAsync();
                     session.AudioClient = audioClient;
 
-                    var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, _ttsOptions, voiceChannel, audioClient);
+                    var userVoices = new DiscordUsersVoice(_loggerDiscordUsersVoice, _loggerDiscordAudioMixer, _ttsOptions, _voIpOptions, voiceChannel, audioClient);
                     session.DiscordVoiceManager = userVoices;
 
                     //Single node only

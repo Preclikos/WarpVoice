@@ -9,7 +9,7 @@ namespace WarpVoice.Converters
         /// Also returns RTP duration (number of 8kHz samples).
         /// </summary>
         public static (byte[] ulawBytes, uint rtpDuration) ConvertFloatToMuLawWithDuration(
-            float[] inputFloats, int inputSampleRate = 48000, int inputChannels = 2)
+            float[] inputFloats, int inputSampleRate = 48000, int inputChannels = 2, float gain = 1.0f)
         {
             // Downmix if stereo
             ReadOnlySpan<float> mono = inputChannels == 1
@@ -24,7 +24,8 @@ namespace WarpVoice.Converters
 
             for (int i = 0; i < resampled.Length; i++)
             {
-                float clamped = Math.Clamp(resampled[i], -1f, 1f);
+                float amplified = resampled[i] * gain;
+                float clamped = Math.Clamp(amplified, -1f, 1f);
                 short pcm = (short)(clamped * short.MaxValue);
                 ulawBytes[i] = MuLawEncoder.LinearToMuLawSample(pcm);
             }

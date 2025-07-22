@@ -13,5 +13,7 @@
         public string RtpIp { get; set; } = string.Empty;
         public int RtpPort { get; set; }
         public int SipPort { get; set; }
+        public float DiscordGain { get; set; }
+        public float SipGain { get; set; }
     }
 }
