@@ -129,7 +129,26 @@ namespace WarpVoice.Audio
                 else
                 {
                     _logger.LogWarning($"Audio loop behind by {-delay}ms");
-                    nextFrameTime = stopwatch.ElapsedMilliseconds; // reset to avoid drift
+                    // We're behind — calculate how many frames behind and skip mixer data
+                    int missedFrames = (int)(-delay / frameDurationMs);
+
+                    if (missedFrames > 0)
+                    {
+                        _logger.LogWarning($"Audio loop behind by {-delay}ms, skipping {missedFrames} frames");
+
+                        int samplesToSkip = missedFrames * samplesPerFrame * channels;
+                        float[] skipBuffer = new float[samplesToSkip];
+
+                        int skipped = 0;
+                        while (skipped < samplesToSkip)
+                        {
+                            int s = _mixer.Read(skipBuffer, skipped, samplesToSkip - skipped);
+                            if (s <= 0) break;
+                            skipped += s;
+                        }
+
+                        nextFrameTime += missedFrames * frameDurationMs;
+                    }
                 }
             }
         }

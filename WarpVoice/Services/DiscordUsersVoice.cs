@@ -31,6 +31,20 @@ namespace WarpVoice.Services
             return _mixer;
         }
 
+
+        public async Task<List<IGuildUser>> FlattenAsyncEnumerable(
+    IAsyncEnumerable<IReadOnlyCollection<IGuildUser>> asyncEnumerable)
+        {
+            var result = new List<IGuildUser>();
+
+            await foreach (var group in asyncEnumerable)
+            {
+                result.AddRange(group); // Flatten each collection into the result list
+            }
+
+            return result;
+        }
+
         public DiscordUsersVoice(ILogger<DiscordUsersVoice> logger, ILogger<DiscordAudioMixer> loggerDiscordAudioMixer, TTSOptions ttsOptions, IVoiceChannel voiceChannel, IAudioClient audioClient)
         {
             _logger = logger;
@@ -46,10 +60,12 @@ namespace WarpVoice.Services
             // Handle already connected users
             Task.Run(async () =>
             {
-                await foreach (var userBatch in voiceChannel.GetUsersAsync())
+                var users = await FlattenAsyncEnumerable(((IVoiceChannel)voiceChannel).GetUsersAsync());
+                var usersInVoiceChannel = users.Where(w => w.VoiceChannel != null && w.VoiceChannel.Id == voiceChannel.Id && !w.IsBot);
+                foreach (var member in usersInVoiceChannel)
                 {
-                    foreach (var member in userBatch)
-                    {
+                    /*foreach (var member in userBatch)
+                    {*/
                         if (!member.IsBot && !_userHandlers.ContainsKey(member.Id))
                         {
                             try
@@ -63,7 +79,7 @@ namespace WarpVoice.Services
                                 logger.LogWarning($"Could not get stream for: {member.Username}");
                             }
                         }
-                    }
+                    //}
                 }
             }).Wait();
 
