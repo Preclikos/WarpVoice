@@ -128,7 +128,7 @@ namespace WarpVoice.Audio
                 {
                     await Task.Delay((int)delay, _cancellationToken);
                 }
-                else
+                else if(delay < 0)
                 {
                     _logger.LogWarning($"Audio loop behind by {-delay}ms");
                     // We're behind — calculate how many frames behind and skip mixer data
