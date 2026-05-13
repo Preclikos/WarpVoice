@@ -1,7 +1,6 @@
 ﻿using Discord;
 using Discord.Interactions;
 using Discord.WebSocket;
-using Microsoft.OpenApi.Models;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using WarpVoice.HostedServices;
@@ -33,14 +32,14 @@ namespace WarpVoice
                 });
 
             // Register the Swagger generator, defining 1 or more Swagger documents
-            services.AddSwaggerGen(c =>
+            /*services.AddSwaggerGen(c =>
             { //<-- NOTE 'Add' instead of 'Configure'
                 c.SwaggerDoc("v1", new OpenApiInfo
                 {
                     Title = "WiggleWiggle Bot Api",
                     Version = "v1"
                 });
-            });
+            });*/
 
             services.AddHttpClient();
 
